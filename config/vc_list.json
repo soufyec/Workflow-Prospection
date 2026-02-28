@@ -1,0 +1,222 @@
+[
+  {
+    "name": "Keen Venture Partners",
+    "url": "https://keenventurepartners.com",
+    "portfolio_url": "https://keenventurepartners.com/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/keen-venture-partners/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "seed",
+    "focus_sector": "deeptech saas",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "Endeit Capital",
+    "url": "https://endeit.com",
+    "portfolio_url": "https://endeit.com/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/endeit-capital/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "Series A",
+    "focus_sector": "digital media saas",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "Capital Mills",
+    "url": "https://capitalmills.com",
+    "portfolio_url": "https://capitalmills.com/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/capital-mills/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "seed",
+    "focus_sector": "saas fintech",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "Newion",
+    "url": "https://newion.com",
+    "portfolio_url": "https://newion.com/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/newion/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "seed",
+    "focus_sector": "software saas",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "Henq Ventures",
+    "url": "https://henq.nl",
+    "portfolio_url": "https://henq.nl/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/henq-ventures/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "seed",
+    "focus_sector": "b2b saas",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "Forbion",
+    "url": "https://forbion.com",
+    "portfolio_url": "https://forbion.com/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/forbion/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "Series A",
+    "focus_sector": "biotech healthtech",
+    "scrape_strategy": "js",
+    "company_selector": null
+  },
+  {
+    "name": "Prime Ventures",
+    "url": "https://prime.vc",
+    "portfolio_url": "https://prime.vc/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/prime-ventures/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "Series A",
+    "focus_sector": "saas fintech",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "NPM Capital",
+    "url": "https://npm-capital.com",
+    "portfolio_url": "https://npm-capital.com/portfolio-companies",
+    "linkedin_url": "https://www.linkedin.com/company/npm-capital/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "Series A",
+    "focus_sector": "technology",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "Volta Ventures",
+    "url": "https://volta.ventures",
+    "portfolio_url": "https://volta.ventures/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/volta-ventures/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "seed",
+    "focus_sector": "saas b2b",
+    "scrape_strategy": "js",
+    "company_selector": null
+  },
+  {
+    "name": "Inkef Capital",
+    "url": "https://inkef.com",
+    "portfolio_url": "https://inkef.com/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/inkef-capital/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "seed",
+    "focus_sector": "healthtech life sciences",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "Antler Netherlands",
+    "url": "https://antler.co",
+    "portfolio_url": "https://www.antler.co/portfolio?location=amsterdam",
+    "linkedin_url": "https://www.linkedin.com/company/antler-vc/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "pre-seed",
+    "focus_sector": "saas deeptech",
+    "scrape_strategy": "js",
+    "company_selector": null
+  },
+  {
+    "name": "Peak Capital",
+    "url": "https://peakcapital.com",
+    "portfolio_url": "https://peakcapital.com/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/peak-capital/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "seed",
+    "focus_sector": "marketplace saas",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "TIIN Capital",
+    "url": "https://tiincapital.nl",
+    "portfolio_url": "https://tiincapital.nl/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/tiin-capital/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "seed",
+    "focus_sector": "technology",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "Borski Fund",
+    "url": "https://borskifund.com",
+    "portfolio_url": "https://borskifund.com/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/borski-fund/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "seed",
+    "focus_sector": "female-led technology",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "Oyster Bay Venture Capital",
+    "url": "https://oysterbay.vc",
+    "portfolio_url": "https://oysterbay.vc/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/oyster-bay-venture-capital/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "pre-seed",
+    "focus_sector": "saas b2b",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "Solid Ventures",
+    "url": "https://solidventures.eu",
+    "portfolio_url": "https://solidventures.eu/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/solid-ventures/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "seed",
+    "focus_sector": "deeptech hardware",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "Hummingbird VC",
+    "url": "https://hummingbird.vc",
+    "portfolio_url": "https://hummingbird.vc/companies",
+    "linkedin_url": "https://www.linkedin.com/company/hummingbird-ventures/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "seed",
+    "focus_sector": "consumer saas marketplace",
+    "scrape_strategy": "js",
+    "company_selector": null
+  },
+  {
+    "name": "Creathor Ventures",
+    "url": "https://creathorventures.com",
+    "portfolio_url": "https://creathorventures.com/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/creathor-ventures/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "Series A",
+    "focus_sector": "saas marketplace",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "Innovation Industries",
+    "url": "https://innovationindustries.com",
+    "portfolio_url": "https://innovationindustries.com/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/innovation-industries/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "seed",
+    "focus_sector": "deeptech manufacturing",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "BOM Brabant Ventures",
+    "url": "https://bom.nl",
+    "portfolio_url": "https://bom.nl/en/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/bom-business-development/posts/",
+    "scrape_linkedin": true,
+    "typical_stage": "pre-seed seed",
+    "focus_sector": "technology",
+    "scrape_strategy": "static",
+    "company_selector": null
+  }
+]

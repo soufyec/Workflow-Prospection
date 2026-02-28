@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: Georgia, 'Times New Roman', serif; max-width: 600px;
+             margin: 0 auto; color: #1a1a1a; line-height: 1.75; padding: 24px;">
+
+  <p>Hi {{ recipient_name }},</p>
+
+  <p>
+    I noticed {{ company_name }} recently closed a <strong>{{ funding_stage }}</strong> round
+    backed by {{ vc_source }} — congratulations. That's a real inflection point.
+  </p>
+
+  <p>
+    {{ industry_hook }}
+  </p>
+
+  <p>
+    At <strong>{{ sender_name }}</strong>, we partner with early-stage
+    {% if industry %}{{ industry.split()[0] }}{% else %}technology{% endif %} companies
+    to build brands that feel inevitable — the kind that make investors and customers
+    trust you before you've said a word.
+  </p>
+
+  <p>
+    We keep our client roster deliberately small (under 10 active partners at any time)
+    so we can genuinely embed with your team rather than just deliver assets.
+    We're opening one spot this quarter.
+  </p>
+
+  <p>
+    Would a 20-minute call this week make sense? No deck, no pitch —
+    just a conversation about where {{ company_name }} is headed and whether there's a fit.
+  </p>
+
+  <p style="margin-top: 2em;">
+    Warm regards,<br>
+    <strong>{{ sender_name }}</strong><br>
+    <a href="mailto:{{ sender_email }}" style="color: #2b5797; text-decoration: none;">
+      {{ sender_email }}
+    </a>
+  </p>
+
+  <hr style="border: none; border-top: 1px solid #eee; margin-top: 2.5em;">
+  <p style="font-size: 11px; color: #999; line-height: 1.5;">
+    You received this email because {{ company_name }} recently raised funding and
+    we believe there could be a genuine fit. Reply STOP to opt out and we won't
+    contact you again.
+  </p>
+
+</body>
+</html>
