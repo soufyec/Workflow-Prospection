@@ -29,10 +29,10 @@ def get_random_headers() -> dict:
 
 def fetch_page(
     url: str,
-    delay_min: float = 1.5,
-    delay_max: float = 4.0,
-    max_retries: int = 3,
-    timeout: int = 15,
+    delay_min: float = 0.3,
+    delay_max: float = 0.8,
+    max_retries: int = 1,
+    timeout: int = 8,
     session: Optional[requests.Session] = None,
 ) -> Optional[str]:
     """
@@ -76,7 +76,7 @@ def fetch_page_playwright(url: str) -> Optional[str]:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page(user_agent=random.choice(USER_AGENTS))
-            page.goto(url, wait_until="domcontentloaded", timeout=20000)
+            page.goto(url, wait_until="domcontentloaded", timeout=8000)
             page.wait_for_timeout(random.randint(1500, 3000))
             content = page.content()
             browser.close()

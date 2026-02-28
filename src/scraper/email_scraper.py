@@ -139,12 +139,23 @@ def _guess_email_pattern(website: str) -> dict:
     }
 
 
+_INVALID_WEBSITE_RE = re.compile(
+    r"\.(pdf|zip|doc|docx|xls|xlsx|ppt|pptx)(\?|$)"
+    r"|cdn\.prod\.website-files\.com"
+    r"|^(?!https?://)",
+    re.IGNORECASE,
+)
+
+
 def find_best_email_for_company(website: str) -> dict:
     """
     Scan subpages of a company website to find the best stakeholder email.
 
     Returns dict with: stakeholder_email, stakeholder_name, email_source_url
     """
+    if not website or _INVALID_WEBSITE_RE.search(website):
+        return {"stakeholder_email": None, "stakeholder_name": None, "email_source_url": None}
+
     base = website.rstrip("/")
     candidate_urls = [base] + [base + path for path in SUBPAGE_CANDIDATES]
 
