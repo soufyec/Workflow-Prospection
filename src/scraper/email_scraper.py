@@ -112,6 +112,33 @@ def infer_stakeholder_name(html: str, email: str) -> Optional[str]:
     return None
 
 
+FALLBACK_PATTERNS = ["hello@{}", "info@{}", "contact@{}", "team@{}", "hi@{}"]
+
+
+def _has_mx_record(domain: str) -> bool:
+    """Check if domain has MX records (can receive email)."""
+    try:
+        import dns.resolver
+        dns.resolver.resolve(domain, "MX")
+        return True
+    except Exception:
+        return False
+
+
+def _guess_email_pattern(website: str) -> dict:
+    """Fallback: return a common generic email for the domain after verifying MX."""
+    domain = urlparse(website).netloc.replace("www.", "")
+    if not domain or not _has_mx_record(domain):
+        return {"stakeholder_email": None, "stakeholder_name": None, "email_source_url": None}
+
+    email = FALLBACK_PATTERNS[0].format(domain)
+    return {
+        "stakeholder_email": email,
+        "stakeholder_name": None,
+        "email_source_url": "pattern-based",
+    }
+
+
 def find_best_email_for_company(website: str) -> dict:
     """
     Scan subpages of a company website to find the best stakeholder email.
@@ -137,7 +164,7 @@ def find_best_email_for_company(website: str) -> dict:
             all_hits.append((s, email, url, html))
 
     if not all_hits:
-        return {"stakeholder_email": None, "stakeholder_name": None, "email_source_url": None}
+        return _guess_email_pattern(website)
 
     all_hits.sort(key=lambda x: x[0])
     best_score, best_email, best_url, best_html = all_hits[0]

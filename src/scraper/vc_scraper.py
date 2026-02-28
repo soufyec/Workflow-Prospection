@@ -167,6 +167,17 @@ def discover_companies(vc_list: Optional[list] = None) -> list:
     except ImportError:
         print("  [SKIP] LinkedIn scraper unavailable")
 
+    # --- News RSS feed scraping ---
+    print("\n  Starting news feed scraping...")
+    try:
+        from src.scraper.news_scraper import discover_from_news
+        news_companies = discover_from_news()
+        if news_companies:
+            append_to_state_list(PIPELINE_PATH, "discovered", news_companies)
+            print(f"  [NEWS] Added {len(news_companies)} companies from news feeds")
+    except Exception as e:
+        print(f"  [SKIP] News feed scraping failed: {e}")
+
     # Load full discovered list from state (includes previous runs)
     state = load_state(PIPELINE_PATH)
     all_discovered = state.get("discovered", [])

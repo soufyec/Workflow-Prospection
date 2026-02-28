@@ -60,6 +60,53 @@ INDUSTRY_HOOKS = {
         "In biotech, credibility is everything. A brand that signals "
         "rigour and ambition can change the outcome of a partnership conversation."
     ),
+    "ai": (
+        "AI companies face a unique branding challenge — making cutting-edge "
+        "technology feel approachable and trustworthy. The ones that nail it "
+        "attract enterprise buyers and top talent faster."
+    ),
+    "proptech": (
+        "PropTech is transforming a traditionally slow industry. "
+        "A modern, credible brand signals innovation and builds trust "
+        "with both real-estate partners and end users."
+    ),
+    "foodtech": (
+        "In food-tech, consumers buy the mission as much as the product. "
+        "A brand that communicates sustainability and quality visually "
+        "wins shelf space and investor confidence alike."
+    ),
+    "mobility": (
+        "Mobility brands compete on trust and futurism. A cohesive identity "
+        "that signals safety, innovation, and sustainability can define "
+        "market positioning before the first ride."
+    ),
+    "cybersecurity": (
+        "In cybersecurity, your brand IS your trust signal. Companies that look "
+        "established and rigorous close enterprise deals dramatically faster "
+        "than those that look like another startup."
+    ),
+    "hrtech": (
+        "HR-tech products are sold to people who care deeply about experience. "
+        "A polished, human-centred brand converts free trials to paid seats "
+        "and drives word-of-mouth referrals."
+    ),
+    "legaltech": (
+        "LegalTech brands that communicate clarity, precision, and modernity "
+        "earn trust faster in an industry built on tradition. "
+        "Design is the fastest way to signal you're different."
+    ),
+    "martech": (
+        "MarTech companies selling to marketers face the highest design bar in tech. "
+        "If your own brand doesn't look world-class, your product pitch falls flat."
+    ),
+    "constructiontech": (
+        "Construction-tech is still early — the brands that establish visual authority now "
+        "will own the category. Design signals innovation in an industry hungry for it."
+    ),
+    "spacetech": (
+        "Space-tech brands that project ambition, precision, and credibility "
+        "attract the institutional partners and government contracts that define scale."
+    ),
     "default": (
         "Brands that invest early in distinctive design consistently "
         "outperform peers on customer acquisition costs and investor confidence."

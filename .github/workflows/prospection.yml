@@ -1,6 +1,11 @@
 name: Prospection Pipeline
 
 on:
+  # Daily automatic run (Mon-Fri at 7:00 UTC → 8:00 CET)
+  schedule:
+    - cron: "0 7 * * 1-5"
+
+  # Manual trigger from GitHub mobile / web
   workflow_dispatch:
     inputs:
       step:
@@ -67,15 +72,16 @@ jobs:
 
       - name: Run pipeline step
         run: |
-          if [ "${{ inputs.step }}" = "send" ]; then
+          STEP="${{ inputs.step || 'all' }}"
+          if [ "$STEP" = "send" ]; then
             python main.py --step send --review-file review/pending_review.csv
           else
-            python main.py --step ${{ inputs.step }}
+            python main.py --step "$STEP"
           fi
 
       # After review: commit the CSV to the repo so you can edit it from GitHub mobile
       - name: Publish review CSV for approval
-        if: inputs.step == 'review' || inputs.step == 'all'
+        if: inputs.step == 'review' || inputs.step == 'all' || github.event_name == 'schedule'
         run: |
           LATEST=$(ls -t review/*.csv 2>/dev/null | grep -v pending_review | head -1)
           if [ -n "$LATEST" ]; then
@@ -99,7 +105,7 @@ jobs:
           retention-days: 30
 
       - name: Upload HTML preview
-        if: inputs.step == 'review' || inputs.step == 'all'
+        if: inputs.step == 'review' || inputs.step == 'all' || github.event_name == 'schedule'
         uses: actions/upload-artifact@v4
         with:
           name: review-preview-${{ github.run_number }}
