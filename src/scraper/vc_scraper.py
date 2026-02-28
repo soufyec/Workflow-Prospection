@@ -11,7 +11,7 @@ Results are merged and deduplicated by domain, then persisted to pipeline.json.
 import json
 import re
 from typing import Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlencode, parse_qs
 
 from bs4 import BeautifulSoup
 
@@ -27,6 +27,63 @@ EXCLUDED_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
+# Tracking query params to strip from company website URLs
+_TRACKING_PARAMS = {
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "gclid", "gbraid", "wbraid", "gad_source", "gad_campaignid",
+    "tap_a", "tap_s", "fbclid", "mc_eid", "ref",
+}
+
+# File extensions that are documents, not company websites
+_DOCUMENT_EXT_RE = re.compile(
+    r"\.(pdf|zip|doc|docx|xls|xlsx|ppt|pptx|csv)(\?|#|$)",
+    re.IGNORECASE,
+)
+
+
+def _clean_website_url(url: str) -> str:
+    """Strip tracking query params from a URL, keep clean path."""
+    parsed = urlparse(url)
+    if not parsed.query:
+        return url
+    clean_qs = {k: v for k, v in parse_qs(parsed.query).items()
+                if k.lower() not in _TRACKING_PARAMS}
+    clean_query = urlencode({k: v[0] for k, v in clean_qs.items()}) if clean_qs else ""
+    return parsed._replace(query=clean_query, fragment="").geturl()
+
+
+_DOMAIN_LIKE_RE = re.compile(
+    r"^(www\.)?[\w\-]+\.[a-z]{2,}(/\S*)?$",
+    re.IGNORECASE,
+)
+
+
+def _name_from_domain(url: str) -> str:
+    """Derive a clean company name from a domain or URL (e.g. www.acme.io → Acme)."""
+    parsed = urlparse(url)
+    netloc = parsed.netloc or url.split("/")[0]
+    domain = re.sub(r"^www\.", "", netloc)
+    name = domain.split(".")[0]
+    return name.capitalize() if name else domain
+
+
+def _normalize_company_name(text: str, href: str) -> str:
+    """Return a proper company name. Falls back to domain derivation when text is a URL/domain."""
+    text = text.strip()
+    if (text.startswith("http://") or text.startswith("https://")
+            or re.match(r"^www\.", text) or _DOMAIN_LIKE_RE.match(text)):
+        return _name_from_domain(text)
+    if "/" in text and len(text) > 40:
+        return _name_from_domain(href)
+    return text
+
+
+def _normalize_website(url: str) -> str:
+    """Return the root website URL (scheme + netloc), stripping subpaths and tracking."""
+    url = _clean_website_url(url)
+    parsed = urlparse(url)
+    return f"{parsed.scheme}://{parsed.netloc}"
+
 
 def load_vc_list(path: str = VC_LIST_PATH) -> list:
     with open(path, "r", encoding="utf-8") as f:
@@ -34,9 +91,11 @@ def load_vc_list(path: str = VC_LIST_PATH) -> list:
 
 
 def _build_record(name: str, website: str, vc_entry: dict, source: str = "portfolio_page") -> dict:
+    clean_website = _normalize_website(website)
+    clean_name = _normalize_company_name(name, clean_website)
     return {
-        "company_name": name.strip(),
-        "website": website.rstrip("/"),
+        "company_name": clean_name,
+        "website": clean_website,
         "vc_source": vc_entry["name"],
         "funding_stage": vc_entry.get("typical_stage", "unknown"),
         "industry": vc_entry.get("focus_sector", ""),
@@ -71,7 +130,7 @@ def extract_companies_from_html(html: str, vc_entry: dict, base_url: str) -> lis
             name = el.get_text(strip=True)
             if link and name:
                 href = urljoin(base_url, link["href"])
-                if urlparse(href).netloc != vc_domain:
+                if urlparse(href).netloc != vc_domain and not _DOCUMENT_EXT_RE.search(href):
                     companies.append(_build_record(name, href, vc_entry))
         return _dedup_by_domain(companies)
 
@@ -83,6 +142,9 @@ def extract_companies_from_html(html: str, vc_entry: dict, base_url: str) -> lis
         if not href.startswith("http"):
             href = urljoin(base_url, href)
         if not href.startswith("http"):
+            continue
+
+        if _DOCUMENT_EXT_RE.search(href):
             continue
 
         parsed = urlparse(href)
