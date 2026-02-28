@@ -1,6 +1,7 @@
 credentials/
 data/
 review/
+!review/pending_review.csv
 .env
 __pycache__/
 *.pyc

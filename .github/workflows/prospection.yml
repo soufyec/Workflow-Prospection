@@ -1,0 +1,107 @@
+name: Prospection Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      step:
+        description: "Etapa del pipeline"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - discover
+          - enrich
+          - generate
+          - review
+          - send
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
+
+      - name: Restore pipeline state
+        if: inputs.step != 'send'
+        uses: actions/download-artifact@v4
+        with:
+          name: pipeline-state
+          path: data/
+        continue-on-error: true
+
+      - name: Set up credentials
+        run: |
+          mkdir -p credentials data review
+          echo "${{ secrets.GMAIL_CREDENTIALS }}" | base64 -d > credentials/credentials.json
+          echo "${{ secrets.GMAIL_TOKEN }}" | base64 -d > credentials/token.json
+
+      - name: Create .env
+        run: |
+          echo "SENDER_EMAIL=${{ secrets.SENDER_EMAIL }}" > .env
+          echo "SENDER_NAME=Dõlmen Studios" >> .env
+          echo "LINKEDIN_EMAIL=${{ secrets.LINKEDIN_EMAIL }}" >> .env
+          echo "LINKEDIN_PASSWORD=${{ secrets.LINKEDIN_PASSWORD }}" >> .env
+
+      - name: Run pipeline step
+        run: |
+          if [ "${{ inputs.step }}" = "send" ]; then
+            python main.py --step send --review-file review/pending_review.csv
+          else
+            python main.py --step ${{ inputs.step }}
+          fi
+
+      # After review: commit the CSV to the repo so you can edit it from GitHub mobile
+      - name: Publish review CSV for approval
+        if: inputs.step == 'review' || inputs.step == 'all'
+        run: |
+          LATEST=$(ls -t review/*.csv 2>/dev/null | grep -v pending_review | head -1)
+          if [ -n "$LATEST" ]; then
+            cp "$LATEST" review/pending_review.csv
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -f review/pending_review.csv
+            git diff --staged --quiet || git commit -m "chore: prospection review ready for approval [skip ci]"
+            git push
+          else
+            echo "No review CSV generated."
+          fi
+
+      - name: Save pipeline state
+        if: inputs.step != 'send' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-state
+          path: data/
+          overwrite: true
+          retention-days: 30
+
+      - name: Upload HTML preview
+        if: inputs.step == 'review' || inputs.step == 'all'
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-preview-${{ github.run_number }}
+          path: review/*.html
+          retention-days: 14
