@@ -5,17 +5,26 @@ Authentication:
 - Uses credentials/credentials.json (Desktop App OAuth2 client secret)
 - Caches token in credentials/token.json (auto-refreshed when expired)
 - On first run, opens a browser window for OAuth2 consent
-- Scope: gmail.send only (minimal permission)
+- Scopes: gmail.send + gmail.settings.basic (for fetching Gmail signature)
+
+NOTE: If you had a token.json from a previous version, delete it and re-run
+so Gmail re-authorises with the new gmail.settings.basic scope.
+
+Scheduling:
+- By default, emails are queued and sent on the next Monday at 09:00 local time
+- Pass send_now=True (or --send-now CLI flag) to send immediately (useful for testing)
 """
 
 import base64
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
 
+import pytz
+from apscheduler.schedulers.blocking import BlockingScheduler
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -33,8 +42,21 @@ from config.settings import (
 from src.utils.deduplication import append_sent_log
 from src.utils.pipeline_state import load_state, save_state
 
-SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
+# gmail.settings.basic is required to read the account signature via the API.
+# If your existing token.json was created with only gmail.send, delete it so
+# the OAuth flow re-runs and grants the new scope.
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.settings.basic",
+]
 
+# Timezone used for the Monday 09:00 schedule
+SEND_TIMEZONE = "Europe/Madrid"
+
+
+# ---------------------------------------------------------------------------
+# Gmail authentication
+# ---------------------------------------------------------------------------
 
 def get_gmail_service():
     """
@@ -69,6 +91,38 @@ def get_gmail_service():
     return build("gmail", "v1", credentials=creds)
 
 
+# ---------------------------------------------------------------------------
+# Gmail signature
+# ---------------------------------------------------------------------------
+
+def get_gmail_signature(service) -> str:
+    """
+    Fetch the HTML signature stored in Gmail settings for SENDER_EMAIL.
+    Returns an empty string if the signature cannot be retrieved.
+    """
+    try:
+        result = (
+            service.users()
+            .settings()
+            .sendAs()
+            .get(userId="me", sendAsEmail=SENDER_EMAIL)
+            .execute()
+        )
+        sig = result.get("signature", "")
+        if sig:
+            print("  Gmail signature fetched successfully.")
+        else:
+            print("  Note: no signature found in Gmail settings for this address.")
+        return sig
+    except HttpError as exc:
+        print(f"  Warning: could not fetch Gmail signature ({exc}). Continuing without it.")
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# MIME email construction
+# ---------------------------------------------------------------------------
+
 def _html_to_plain(html: str) -> str:
     """Strip HTML tags to produce a plain-text fallback."""
     text = re.sub(r"<[^>]+>", "", html)
@@ -76,41 +130,76 @@ def _html_to_plain(html: str) -> str:
     return text.strip()
 
 
-def build_mime_email(company: dict) -> str:
+def build_mime_email(company: dict, signature_html: str = "") -> str:
     """
-    Build a base64url-encoded MIME email (multipart/alternative with plain-text fallback).
+    Build a base64url-encoded MIME email (multipart/alternative).
+
+    If signature_html is provided (fetched from Gmail settings), it is
+    injected into the HTML body immediately before </body> so it appears
+    below the email content, matching how Gmail renders composed messages.
     """
+    body = company.get("email_body", "")
+
+    if signature_html:
+        sig_block = (
+            '<div style="margin-top:24px; padding-top:16px; '
+            'border-top:1px solid #e0e0e0;">'
+            f"{signature_html}"
+            "</div>"
+        )
+        body = body.replace("</body>", f"{sig_block}\n</body>")
+
     msg = MIMEMultipart("alternative")
     msg["Subject"] = company["email_subject"]
     msg["From"] = f"{SENDER_NAME} <{SENDER_EMAIL}>"
     msg["To"] = company["stakeholder_email"]
 
-    plain = _html_to_plain(company.get("email_body", ""))
+    plain = _html_to_plain(body)
     msg.attach(MIMEText(plain, "plain", "utf-8"))
-    msg.attach(MIMEText(company.get("email_body", ""), "html", "utf-8"))
+    msg.attach(MIMEText(body, "html", "utf-8"))
 
     return base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
 
 
-def send_approved_emails(review_file: str) -> None:
-    """
-    Entry point for Stage 5.
+# ---------------------------------------------------------------------------
+# Scheduling
+# ---------------------------------------------------------------------------
 
-    1. Load approved companies from the review CSV
-    2. Authenticate Gmail API
-    3. Send each email; log success/failure to sent_log.csv
-    4. Update pipeline state
+def _next_monday_at_9am() -> datetime:
+    """
+    Return the next Monday at 09:00 in SEND_TIMEZONE.
+
+    - If today is Monday and it is before 09:00 → today at 09:00
+    - Otherwise → next Monday at 09:00
+    """
+    tz = pytz.timezone(SEND_TIMEZONE)
+    now = datetime.now(tz)
+    days_until_monday = (7 - now.weekday()) % 7  # 0 = already Monday
+    if days_until_monday == 0 and now.hour >= 9:
+        days_until_monday = 7  # Already past 9 AM Monday → next week
+    target_date = now + timedelta(days=days_until_monday)
+    return target_date.replace(hour=9, minute=0, second=0, microsecond=0)
+
+
+# ---------------------------------------------------------------------------
+# Core send logic
+# ---------------------------------------------------------------------------
+
+def _do_send(review_file: str) -> None:
+    """
+    Authenticate, fetch signature, and dispatch all approved emails.
+    Called directly (send_now=True) or by the scheduler.
     """
     from src.reviewer.review import load_approved_from_review
 
     approved = load_approved_from_review(review_file)
     if not approved:
         print("  [INFO] No approved emails found in the review file.")
-        print("  Open the review CSV, set review_status = 'approved', save, and re-run.")
         return
 
-    print(f"  Found {len(approved)} approved email(s) to send.")
+    print(f"\n  Sending {len(approved)} approved email(s)…")
     service = get_gmail_service()
+    signature_html = get_gmail_signature(service)
     state = load_state(PIPELINE_PATH)
 
     sent_records = []
@@ -124,7 +213,7 @@ def send_approved_emails(review_file: str) -> None:
             continue
 
         try:
-            raw = build_mime_email(company)
+            raw = build_mime_email(company, signature_html)
             service.users().messages().send(
                 userId="me",
                 body={"raw": raw},
@@ -161,3 +250,35 @@ def send_approved_emails(review_file: str) -> None:
 
     print(f"\n  Sent: {success_count}  |  Failed: {fail_count}")
     print(f"  Audit log: {SENT_LOG_PATH}")
+
+
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
+
+def send_approved_emails(review_file: str, send_now: bool = False) -> None:
+    """
+    Entry point for Stage 5.
+
+    send_now=False (default): schedules the send for the next Monday at 09:00
+    send_now=True: sends immediately (useful for testing)
+    """
+    if send_now:
+        _do_send(review_file)
+        return
+
+    target = _next_monday_at_9am()
+    tz_label = target.strftime("%Z")
+    print(
+        f"\n  Emails scheduled for: "
+        f"{target.strftime('%A %d %B %Y at %H:%M')} {tz_label}"
+    )
+    print("  Keep this terminal open. Press Ctrl+C to cancel.\n")
+
+    scheduler = BlockingScheduler(timezone=SEND_TIMEZONE)
+    scheduler.add_job(_do_send, "date", run_date=target, args=[review_file])
+
+    try:
+        scheduler.start()
+    except KeyboardInterrupt:
+        print("\n  Scheduling cancelled.")

@@ -6,13 +6,15 @@ Usage:
   python main.py --step enrich     # Find stakeholder emails on company websites
   python main.py --step generate   # Render personalized emails from template
   python main.py --step review     # Generate review CSV + HTML preview
-  python main.py --step send       # Send approved emails via Gmail API
+  python main.py --step send       # Schedule approved emails for next Monday 09:00
   python main.py --step all        # Run discover → enrich → generate → review
 
   python main.py --status          # Show current pipeline state counts
   python main.py --reset           # Clear pipeline state (start fresh)
 
+  # Optional flags for --step send:
   python main.py --step send --review-file review/review_20240301_120000.csv
+  python main.py --step send --send-now   # Skip schedule, send immediately (testing)
 """
 
 import argparse
@@ -63,9 +65,10 @@ def cmd_send(args):
         print("  Run --step review first, or pass --review-file <path>")
         sys.exit(1)
 
+    send_now = getattr(args, "send_now", False)
     from src.sender.gmail_sender import send_approved_emails
 
-    send_approved_emails(review_file)
+    send_approved_emails(review_file, send_now=send_now)
 
 
 def cmd_all(args):
@@ -140,6 +143,12 @@ def main():
         "--review-file",
         metavar="PATH",
         help="Path to the edited review CSV (used with --step send)",
+    )
+    parser.add_argument(
+        "--send-now",
+        action="store_true",
+        default=False,
+        help="Send immediately instead of scheduling for Monday 09:00 (testing only)",
     )
 
     args = parser.parse_args()
