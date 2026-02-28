@@ -2,14 +2,14 @@
 Stage 3: Render personalized emails from the Jinja2 template.
 
 Template variables injected per company:
-  recipient_name  - First name of stakeholder (or "there" if unknown)
-  company_name    - Target company name
-  industry        - Sector/industry from VC metadata
-  vc_source       - VC firm name (used as social proof hook)
-  funding_stage   - pre-seed / seed / Series A
-  industry_hook   - Dynamic one-liner tailored to the company's sector
-  sender_name     - Dõlmen Studios
-  sender_email    - hello@dolmenstudios.com
+  recipient_name      - First name of stakeholder (or "there" if unknown)
+  company_name        - Target company name
+  industry_label      - Human-readable industry name ("SaaS", "fintech", etc.)
+  vc_source           - VC firm name (or empty string)
+  product_service_line - "Your SaaS product" / "Your financial platform" / etc.
+  pain_point          - Industry-specific opportunity sentence
+  sender_name         - Dõlmen Studios
+  sender_email        - hello@dolmenstudios.com
 """
 
 import os
@@ -20,107 +20,179 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from config.settings import PIPELINE_PATH, SENDER_EMAIL, SENDER_NAME, TEMPLATE_PATH
 from src.utils.pipeline_state import load_state, save_state
 
-INDUSTRY_HOOKS = {
+# Human-readable label used in "While researching X companies, I came across Y"
+INDUSTRY_LABELS = {
+    "fintech": "fintech",
+    "saas": "SaaS",
+    "healthtech": "healthcare technology",
+    "ecommerce": "e-commerce",
+    "cleantech": "clean energy",
+    "greentech": "clean energy",
+    "edtech": "edtech",
+    "deeptech": "deep tech",
+    "marketplace": "marketplace",
+    "biotech": "biotech",
+    "ai": "AI",
+    "proptech": "real estate technology",
+    "foodtech": "food tech",
+    "mobility": "mobility",
+    "cybersecurity": "cybersecurity",
+    "hrtech": "HR tech",
+    "legaltech": "legal tech",
+    "martech": "marketing tech",
+    "constructiontech": "construction tech",
+    "spacetech": "space tech",
+    "realestate": "real estate",
+    "healthcare": "healthcare",
+    "consulting": "B2B consulting",
+}
+
+# Opening sentence for the company-specific observation paragraph
+PRODUCT_SERVICE_LINES = {
+    "fintech": "Your financial platform is solid",
+    "saas": "Your SaaS product is solid",
+    "healthtech": "Your health solution is solid",
+    "healthcare": "Your healthcare offer is solid",
+    "ecommerce": "Your e-commerce experience is solid",
+    "cleantech": "Your clean energy platform is solid",
+    "greentech": "Your clean energy platform is solid",
+    "edtech": "Your learning platform is solid",
+    "deeptech": "Your technology is solid",
+    "marketplace": "Your marketplace is solid",
+    "biotech": "Your biotech platform is solid",
+    "ai": "Your AI product is solid",
+    "proptech": "Your property platform is solid",
+    "realestate": "Your real estate offer is solid",
+    "foodtech": "Your food tech solution is solid",
+    "mobility": "Your mobility solution is solid",
+    "cybersecurity": "Your security platform is solid",
+    "hrtech": "Your HR platform is solid",
+    "legaltech": "Your legal tech product is solid",
+    "martech": "Your marketing platform is solid",
+    "constructiontech": "Your construction tech solution is solid",
+    "spacetech": "Your technology is solid",
+    "consulting": "Your consultancy offer is solid",
+    "default": "Your product is solid",
+}
+
+# The "pain point" — what the brand is missing / where the opportunity lies
+PAIN_POINTS = {
     "fintech": (
-        "We've seen how fintech brands that nail their visual identity "
-        "convert significantly better at every funnel stage — "
-        "trust is your most valuable asset."
+        "we believe your current brand doesn't yet project the institutional trust "
+        "needed to close the enterprise deals your product deserves"
     ),
     "saas": (
-        "Early-stage SaaS teams that invest in brand early tend to close "
-        "enterprise deals faster. A polished identity signals maturity "
-        "before a single demo call."
+        "your visual identity doesn't yet match the quality of what you've built — "
+        "and that gap costs you at every enterprise demo and investor conversation"
     ),
     "healthtech": (
-        "In health-tech, trust is everything. A cohesive brand signals "
-        "credibility and safety before a single word is read — "
-        "patients and buyers both notice."
+        "your digital presence underrepresents the quality of care you deliver, "
+        "which can slow trust-building with both patients and institutional partners"
+    ),
+    "healthcare": (
+        "your digital presence underrepresents the quality of care you deliver, "
+        "which can slow trust-building with both patients and institutional partners"
     ),
     "ecommerce": (
-        "In crowded e-commerce, a distinctive brand is the only moat "
-        "that can't be copied overnight. Design is retention before it's acquisition."
+        "you're likely leaving conversion on the table due to brand inconsistencies "
+        "that signal 'startup' when your product is ready to be a market leader"
     ),
     "cleantech": (
-        "Climate-tech brands that communicate their mission visually "
-        "attract better talent, better press, and easier follow-on rounds."
+        "your mission deserves a visual identity that converts climate-conscious buyers "
+        "and ESG-focused investors into long-term advocates"
+    ),
+    "greentech": (
+        "your mission deserves a visual identity that converts climate-conscious buyers "
+        "and ESG-focused investors into long-term advocates"
     ),
     "edtech": (
-        "EdTech products that feel intuitive and trustworthy see "
-        "dramatically higher course completion and renewal rates."
+        "learners and institutions make trust decisions in seconds — "
+        "and your current brand may not be winning that moment as consistently as you could"
     ),
     "deeptech": (
-        "Deep-tech companies often underinvest in brand — which means "
-        "the ones that don't stand out immediately to investors and enterprise buyers."
+        "deep-tech companies often communicate complexity when they should be communicating "
+        "confidence — and that affects enterprise buy-in and investor narrative"
     ),
     "marketplace": (
-        "Marketplace businesses live or die on supply-side trust. "
-        "Brand design is often the fastest lever to improve both sides of that equation."
+        "brand perception drives supply-side trust more than any feature — "
+        "and a gap there limits growth on both sides of your marketplace"
     ),
     "biotech": (
-        "In biotech, credibility is everything. A brand that signals "
-        "rigour and ambition can change the outcome of a partnership conversation."
+        "credibility signals in brand design can change the outcome of partnership "
+        "and regulatory conversations before a word is spoken"
     ),
     "ai": (
-        "AI companies face a unique branding challenge — making cutting-edge "
-        "technology feel approachable and trustworthy. The ones that nail it "
-        "attract enterprise buyers and top talent faster."
+        "there's an opportunity to make your AI feel more trustworthy and approachable "
+        "without compromising the technical credibility you've earned"
     ),
     "proptech": (
-        "PropTech is transforming a traditionally slow industry. "
-        "A modern, credible brand signals innovation and builds trust "
-        "with both real-estate partners and end users."
+        "in property, a brand that signals premium before the first interaction "
+        "can justify your pricing and attract higher-quality clients and partners"
+    ),
+    "realestate": (
+        "in luxury real estate, a brand that signals premium before the first interaction "
+        "can justify your pricing and attract higher-quality clients"
     ),
     "foodtech": (
-        "In food-tech, consumers buy the mission as much as the product. "
-        "A brand that communicates sustainability and quality visually "
-        "wins shelf space and investor confidence alike."
+        "consumers and retail partners buy the mission as much as the product — "
+        "and your brand may not be telling that story clearly enough yet"
     ),
     "mobility": (
-        "Mobility brands compete on trust and futurism. A cohesive identity "
-        "that signals safety, innovation, and sustainability can define "
-        "market positioning before the first ride."
+        "trust and safety perception are everything in mobility — "
+        "and there's room to strengthen how your brand signals both to users and regulators"
     ),
     "cybersecurity": (
-        "In cybersecurity, your brand IS your trust signal. Companies that look "
-        "established and rigorous close enterprise deals dramatically faster "
-        "than those that look like another startup."
+        "in security, brand credibility is your first line of trust with enterprise buyers, "
+        "and a perception gap at that level can be costly"
     ),
     "hrtech": (
-        "HR-tech products are sold to people who care deeply about experience. "
-        "A polished, human-centred brand converts free trials to paid seats "
-        "and drives word-of-mouth referrals."
+        "HR platforms succeed when they feel human — "
+        "and there's an opportunity to strengthen how your brand connects emotionally "
+        "with HR leaders and their teams"
     ),
     "legaltech": (
-        "LegalTech brands that communicate clarity, precision, and modernity "
-        "earn trust faster in an industry built on tradition. "
-        "Design is the fastest way to signal you're different."
+        "communicating precision and modernity simultaneously is the legaltech branding "
+        "challenge — and it's where many platforms leave value on the table"
     ),
     "martech": (
-        "MarTech companies selling to marketers face the highest design bar in tech. "
-        "If your own brand doesn't look world-class, your product pitch falls flat."
+        "marketing platforms are judged by their own marketing first — "
+        "and there's an opportunity to raise the bar on how your brand presents itself "
+        "to the CMOs and marketing directors you're selling to"
     ),
     "constructiontech": (
-        "Construction-tech is still early — the brands that establish visual authority now "
-        "will own the category. Design signals innovation in an industry hungry for it."
+        "construction tech is still early — the brands that establish visual authority now "
+        "will own the category, and design signals innovation in an industry hungry for it"
     ),
     "spacetech": (
-        "Space-tech brands that project ambition, precision, and credibility "
-        "attract the institutional partners and government contracts that define scale."
+        "space tech brands that project ambition, precision, and credibility "
+        "attract the institutional partners and government contracts that define scale"
+    ),
+    "consulting": (
+        "potential clients make a quality judgement about your expertise "
+        "before the first call — and your current brand may not be winning that moment"
     ),
     "default": (
-        "Brands that invest early in distinctive design consistently "
-        "outperform peers on customer acquisition costs and investor confidence."
+        "we believe there's a meaningful opportunity to strengthen your visual identity "
+        "and messaging to match the quality of your underlying business"
     ),
 }
 
 
-def get_industry_hook(industry: str) -> str:
-    """Return the most relevant industry hook based on sector keywords."""
+def _get_by_industry(mapping: dict, industry: str) -> str:
+    """Look up a value from an industry mapping, with fallback to 'default'."""
     industry_lower = (industry or "").lower()
-    for key, hook in INDUSTRY_HOOKS.items():
+    for key in mapping:
         if key in industry_lower:
-            return hook
-    return INDUSTRY_HOOKS["default"]
+            return mapping[key]
+    return mapping["default"]
+
+
+def get_industry_label(industry: str) -> str:
+    industry_lower = (industry or "").lower()
+    for key, label in INDUSTRY_LABELS.items():
+        if key in industry_lower:
+            return label
+    return "technology"
 
 
 def get_first_name(full_name: Optional[str]) -> str:
@@ -144,19 +216,23 @@ def render_email(company: dict) -> dict:
     )
     template = env.get_template(template_file)
 
+    industry = company.get("industry", "")
+    company_name = company.get("company_name", "your company")
+    vc_source = company.get("vc_source", "")
+
     context = {
         "sender_name": SENDER_NAME,
         "sender_email": SENDER_EMAIL,
         "recipient_name": get_first_name(company.get("stakeholder_name")),
-        "company_name": company.get("company_name", "your company"),
-        "industry": company.get("industry", ""),
-        "vc_source": company.get("vc_source", "a top investor"),
-        "funding_stage": company.get("funding_stage", "seed"),
-        "industry_hook": get_industry_hook(company.get("industry", "")),
+        "company_name": company_name,
+        "industry_label": get_industry_label(industry),
+        "vc_source": vc_source,
+        "product_service_line": _get_by_industry(PRODUCT_SERVICE_LINES, industry),
+        "pain_point": _get_by_industry(PAIN_POINTS, industry),
     }
 
     body = template.render(**context)
-    subject = f"Brand partnership opportunity for {company.get('company_name', 'your team')}"
+    subject = f"Branding opportunity — {company_name} × Dõlmen Studios"
     return {"email_subject": subject, "email_body": body}
 
 

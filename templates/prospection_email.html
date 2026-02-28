@@ -7,37 +7,46 @@
 <body style="font-family: Georgia, 'Times New Roman', serif; max-width: 600px;
              margin: 0 auto; color: #1a1a1a; line-height: 1.75; padding: 24px;">
 
-  <p>Hi {{ recipient_name }},</p>
+  <p>Hello {{ recipient_name }},</p>
 
   <p>
-    I noticed {{ company_name }} recently closed a <strong>{{ funding_stage }}</strong> round
-    backed by {{ vc_source }} — congratulations. That's a real inflection point.
+    I'm Soufyan, Strategic Branding Manager at <strong>Dõlmen Studios</strong>.
   </p>
 
   <p>
-    {{ industry_hook }}
+    At Dõlmen, we help companies through brand strategy and design with a strong focus
+    on performance &amp; human connections — so they don't just look good, but actively
+    drive business metrics such as leads, conversions, investment, and strategic partnerships.
   </p>
 
   <p>
-    At <strong>{{ sender_name }}</strong>, we partner with early-stage
-    {% if industry %}{{ industry.split()[0] }}{% else %}technology{% endif %} companies
-    to build brands that feel inevitable — the kind that make investors and customers
-    trust you before you've said a word.
+    We've collaborated with companies such as Nike on strategic branding projects.
+    If you'd like to see how we approach this work, you can find some of our most relevant
+    case studies on
+    <a href="https://www.dolmenstudios.com" style="color: #2b5797; text-decoration: none;">our website</a>.
   </p>
 
   <p>
-    We keep our client roster deliberately small (under 10 active partners at any time)
-    so we can genuinely embed with your team rather than just deliver assets.
-    We're opening one spot this quarter.
+    While researching {{ industry_label }} companies, I came across
+    <strong>{{ company_name }}</strong>{% if vc_source %} —
+    great to see the backing from {{ vc_source }}{% endif %}.
+    {{ product_service_line }}, but {{ pain_point }}.
   </p>
 
   <p>
-    Would a 20-minute call this week make sense? No deck, no pitch —
-    just a conversation about where {{ company_name }} is headed and whether there's a fit.
+    If useful, we'd be happy to connect and offer a <strong>Free Brand Audit</strong>
+    in a first video call — sharing concrete insights and specific improvement opportunities
+    for {{ company_name }}.
+  </p>
+
+  <p>
+    If that sounds good to you, just let me know what your availability looks like for next week.
   </p>
 
   <p style="margin-top: 2em;">
-    Warm regards,<br>
+    Kind regards,<br>
+    <strong>Soufyan</strong><br>
+    Strategic Branding Manager<br>
     <strong>{{ sender_name }}</strong><br>
     <a href="mailto:{{ sender_email }}" style="color: #2b5797; text-decoration: none;">
       {{ sender_email }}
@@ -46,9 +55,9 @@
 
   <hr style="border: none; border-top: 1px solid #eee; margin-top: 2.5em;">
   <p style="font-size: 11px; color: #999; line-height: 1.5;">
-    You received this email because {{ company_name }} recently raised funding and
-    we believe there could be a genuine fit. Reply STOP to opt out and we won't
-    contact you again.
+    You received this because {{ company_name }} appeared in our research on
+    {{ industry_label }} companies and we believe there could be a genuine fit.
+    Reply STOP to opt out and we won't contact you again.
   </p>
 
 </body>
