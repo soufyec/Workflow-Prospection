@@ -25,11 +25,9 @@ from typing import Optional
 
 import pytz
 from apscheduler.schedulers.blocking import BlockingScheduler
-from google.auth.transport.requests import Request
+from google.auth.transport.requests import Request, AuthorizedSession
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 
 from config.settings import (
     CREDENTIALS_PATH,
@@ -58,14 +56,17 @@ SEND_TIMEZONE = "Europe/Madrid"
 # Gmail authentication
 # ---------------------------------------------------------------------------
 
-def get_gmail_service():
+GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
+
+
+def get_gmail_service() -> AuthorizedSession:
     """
-    Authenticate and return a Gmail API service object.
+    Authenticate and return a requests-based AuthorizedSession for Gmail API.
 
     Token lifecycle:
     - Valid token.json → use directly
     - Expired token with refresh_token → auto-refresh
-    - No token → launch browser OAuth2 consent flow
+    - No token → OOB console OAuth2 consent flow
     """
     creds: Optional[Credentials] = None
 
@@ -97,33 +98,29 @@ def get_gmail_service():
         with open(TOKEN_PATH, "w") as f:
             f.write(creds.to_json())
 
-    return build("gmail", "v1", credentials=creds)
+    return AuthorizedSession(creds)
 
 
 # ---------------------------------------------------------------------------
 # Gmail signature
 # ---------------------------------------------------------------------------
 
-def get_gmail_signature(service) -> str:
+def get_gmail_signature(session: AuthorizedSession) -> str:
     """
     Fetch the HTML signature stored in Gmail settings for SENDER_EMAIL.
     Returns an empty string if the signature cannot be retrieved.
     """
     try:
-        result = (
-            service.users()
-            .settings()
-            .sendAs()
-            .get(userId="me", sendAsEmail=SENDER_EMAIL)
-            .execute()
-        )
-        sig = result.get("signature", "")
+        url = f"{GMAIL_API}/settings/sendAs/{SENDER_EMAIL}"
+        resp = session.get(url)
+        resp.raise_for_status()
+        sig = resp.json().get("signature", "")
         if sig:
             print("  Gmail signature fetched successfully.")
         else:
             print("  Note: no signature found in Gmail settings for this address.")
         return sig
-    except HttpError as exc:
+    except Exception as exc:
         print(f"  Warning: could not fetch Gmail signature ({exc}). Continuing without it.")
         return ""
 
@@ -242,6 +239,7 @@ def _do_send(review_file: str) -> None:
     print(f"\n  Sending {len(approved)} approved email(s)…")
     service = get_gmail_service()
     signature_html = get_gmail_signature(service)
+
     state = load_state(PIPELINE_PATH)
 
     sent_records = []
@@ -256,10 +254,11 @@ def _do_send(review_file: str) -> None:
 
         try:
             raw = build_mime_email(company, signature_html)
-            service.users().messages().send(
-                userId="me",
-                body={"raw": raw},
-            ).execute()
+            resp = service.post(
+                f"{GMAIL_API}/messages/send",
+                json={"raw": raw},
+            )
+            resp.raise_for_status()
 
             sent_records.append({
                 "timestamp": datetime.now().isoformat(),
@@ -274,7 +273,7 @@ def _do_send(review_file: str) -> None:
             success_count += 1
             print(f"  [SENT] {company.get('company_name')} → {email_addr}")
 
-        except HttpError as e:
+        except Exception as e:
             fail_count += 1
             sent_records.append({
                 "timestamp": datetime.now().isoformat(),
