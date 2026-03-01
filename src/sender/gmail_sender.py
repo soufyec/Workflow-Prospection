@@ -181,6 +181,39 @@ def _next_monday_at_9am() -> datetime:
     return target_date.replace(hour=9, minute=0, second=0, microsecond=0)
 
 
+def _parse_schedule_at(value: str) -> datetime:
+    """
+    Parse a user-supplied schedule string into a timezone-aware datetime.
+
+    Accepted formats:
+      "tomorrow"           → tomorrow at 09:00 in SEND_TIMEZONE
+      "YYYY-MM-DD"         → that date at 09:00 in SEND_TIMEZONE
+      "YYYY-MM-DD HH:MM"   → exact datetime in SEND_TIMEZONE
+    """
+    tz = pytz.timezone(SEND_TIMEZONE)
+    now = datetime.now(tz)
+
+    if value.strip().lower() == "tomorrow":
+        target = (now + timedelta(days=1)).replace(
+            hour=9, minute=0, second=0, microsecond=0
+        )
+        return target
+
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            naive = datetime.strptime(value.strip(), fmt)
+            if fmt == "%Y-%m-%d":
+                naive = naive.replace(hour=9, minute=0)
+            return tz.localize(naive)
+        except ValueError:
+            continue
+
+    raise ValueError(
+        f"Cannot parse --schedule-at value: {value!r}\n"
+        "Use 'tomorrow', 'YYYY-MM-DD', or 'YYYY-MM-DD HH:MM'"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Core send logic
 # ---------------------------------------------------------------------------
@@ -256,18 +289,32 @@ def _do_send(review_file: str) -> None:
 # Public entry point
 # ---------------------------------------------------------------------------
 
-def send_approved_emails(review_file: str, send_now: bool = False) -> None:
+def send_approved_emails(
+    review_file: str,
+    send_now: bool = False,
+    schedule_at: Optional[str] = None,
+) -> None:
     """
     Entry point for Stage 5.
 
-    send_now=False (default): schedules the send for the next Monday at 09:00
-    send_now=True: sends immediately (useful for testing)
+    send_now=True        → send immediately (testing)
+    schedule_at="..."    → schedule for a specific time: "tomorrow",
+                           "YYYY-MM-DD", or "YYYY-MM-DD HH:MM"
+    (default)            → schedule for next Monday at 09:00
     """
     if send_now:
         _do_send(review_file)
         return
 
-    target = _next_monday_at_9am()
+    if schedule_at:
+        try:
+            target = _parse_schedule_at(schedule_at)
+        except ValueError as e:
+            print(f"  [ERROR] {e}")
+            return
+    else:
+        target = _next_monday_at_9am()
+
     tz_label = target.strftime("%Z")
     print(
         f"\n  Emails scheduled for: "

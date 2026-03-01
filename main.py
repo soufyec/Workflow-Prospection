@@ -14,7 +14,10 @@ Usage:
 
   # Optional flags for --step send:
   python main.py --step send --review-file review/review_20240301_120000.csv
-  python main.py --step send --send-now   # Skip schedule, send immediately (testing)
+  python main.py --step send --send-now              # Send immediately (testing)
+  python main.py --step send --schedule-at tomorrow  # Tomorrow at 09:00
+  python main.py --step send --schedule-at "2026-03-10"        # That date at 09:00
+  python main.py --step send --schedule-at "2026-03-10 14:30"  # Exact time
 """
 
 import argparse
@@ -66,9 +69,10 @@ def cmd_send(args):
         sys.exit(1)
 
     send_now = getattr(args, "send_now", False)
+    schedule_at = getattr(args, "schedule_at", None)
     from src.sender.gmail_sender import send_approved_emails
 
-    send_approved_emails(review_file, send_now=send_now)
+    send_approved_emails(review_file, send_now=send_now, schedule_at=schedule_at)
 
 
 def cmd_all(args):
@@ -148,7 +152,17 @@ def main():
         "--send-now",
         action="store_true",
         default=False,
-        help="Send immediately instead of scheduling for Monday 09:00 (testing only)",
+        help="Send immediately instead of scheduling (testing only)",
+    )
+    parser.add_argument(
+        "--schedule-at",
+        metavar="WHEN",
+        default=None,
+        help=(
+            "Schedule send for a specific time. "
+            "Values: 'tomorrow', 'YYYY-MM-DD', 'YYYY-MM-DD HH:MM'. "
+            "Default (omitted): next Monday at 09:00."
+        ),
     )
 
     args = parser.parse_args()
