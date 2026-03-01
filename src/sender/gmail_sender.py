@@ -82,7 +82,16 @@ def get_gmail_service():
                     "See README.md for Gmail OAuth2 setup instructions."
                 )
             flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
-            creds = flow.run_local_server(port=0)
+            flow.redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
+            auth_url, _ = flow.authorization_url(prompt="consent")
+            print("\n" + "=" * 60)
+            print("  Gmail OAuth2 — Abre esta URL en tu navegador:")
+            print("=" * 60)
+            print(f"\n  {auth_url}\n")
+            print("=" * 60)
+            auth_code = input("  Pega aquí el código de autorización: ").strip()
+            flow.fetch_token(code=auth_code)
+            creds = flow.credentials
 
         os.makedirs(os.path.dirname(TOKEN_PATH), exist_ok=True)
         with open(TOKEN_PATH, "w") as f:
