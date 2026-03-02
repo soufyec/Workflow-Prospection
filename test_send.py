@@ -32,13 +32,14 @@ print(f"  Using review file: {REVIEW_FILE}")
 # ---------------------------------------------------------------------------
 with open(REVIEW_FILE, newline="", encoding="utf-8") as f:
     reader = csv.DictReader(f)
+    rows = list(reader)
     company = next(
-        (row for row in reader if row["review_status"] == "approved"),
-        None,
+        (r for r in rows if r["review_status"] == "approved"),
+        rows[0] if rows else None,
     )
 
 if not company:
-    print("[ERROR] No approved rows found in the review file.")
+    print("[ERROR] Review file is empty.")
     sys.exit(1)
 
 # Override recipient + mark as test
