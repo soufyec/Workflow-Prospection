@@ -3,6 +3,7 @@ Stage 3: Render personalized emails from the Jinja2 template.
 
 Template variables injected per company:
   recipient_name      - First name of stakeholder (or "there" if unknown)
+  stakeholder_role    - Job title of the stakeholder (e.g. "CEO & Co-Founder")
   company_name        - Target company name
   industry_label      - Human-readable industry name ("SaaS", "fintech", etc.)
   vc_source           - VC firm name (or empty string)
@@ -224,6 +225,7 @@ def render_email(company: dict) -> dict:
         "sender_name": SENDER_NAME,
         "sender_email": SENDER_EMAIL,
         "recipient_name": get_first_name(company.get("stakeholder_name")),
+        "stakeholder_role": company.get("stakeholder_role", ""),
         "company_name": company_name,
         "industry_label": get_industry_label(industry),
         "vc_source": vc_source,

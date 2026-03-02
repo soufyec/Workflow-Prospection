@@ -10,7 +10,8 @@
   <p>Hello {{ recipient_name }},</p>
 
   <p>
-    I'm Soufyan, Strategic Branding Manager at <strong>Dõlmen Studios</strong>.
+    I'm Soufyan, Strategic Branding Manager at <strong>Dõlmen Studios</strong>.{% if stakeholder_role %}
+    I'm writing to you directly as {{ stakeholder_role }} of {{ company_name }}.{% endif %}
   </p>
 
   <p>
