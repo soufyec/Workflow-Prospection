@@ -10,10 +10,22 @@ import os
 
 sys.path.insert(0, os.path.dirname(__file__))
 
+import json
+
 from src.sender.gmail_sender import get_gmail_service, get_gmail_signature, build_mime_email, GMAIL_API
 
-REVIEW_FILE = "review/review_20260228_205655.csv"
 TEST_RECIPIENT = "soufyess@gmail.com"
+
+# Resolve review file from pipeline state (same logic as --step send)
+with open("data/pipeline.json", encoding="utf-8") as _f:
+    _state = json.load(_f)
+REVIEW_FILE = _state.get("review_file")
+if not REVIEW_FILE or not os.path.exists(REVIEW_FILE):
+    print(f"[ERROR] Review file not found: {REVIEW_FILE!r}")
+    print("  Run --step review first.")
+    sys.exit(1)
+
+print(f"  Using review file: {REVIEW_FILE}")
 
 # ---------------------------------------------------------------------------
 # Load first approved row
