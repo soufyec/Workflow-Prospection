@@ -10,8 +10,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from src.sender.gmail_sender import get_gmail_service, get_gmail_signature, build_mime_email
-from config.settings import GMAIL_API  # noqa: F401 – imported for reference
+from src.sender.gmail_sender import get_gmail_service, get_gmail_signature, build_mime_email, GMAIL_API
 
 REVIEW_FILE = "review/review_20260228_205655.csv"
 TEST_RECIPIENT = "soufyess@gmail.com"
@@ -52,9 +51,8 @@ signature_html = get_gmail_signature(service)
 # ---------------------------------------------------------------------------
 raw = build_mime_email(company, signature_html)
 
-from config.settings import SENDER_EMAIL
 resp = service.post(
-    f"https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+    f"{GMAIL_API}/messages/send",
     json={"raw": raw},
 )
 
