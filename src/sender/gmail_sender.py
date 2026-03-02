@@ -31,6 +31,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 
 from config.settings import (
     CREDENTIALS_PATH,
+    GMAIL_SIGNATURE,
     PIPELINE_PATH,
     SENDER_EMAIL,
     SENDER_NAME,
@@ -108,7 +109,7 @@ def get_gmail_service() -> AuthorizedSession:
 def get_gmail_signature(session: AuthorizedSession) -> str:
     """
     Fetch the HTML signature stored in Gmail settings for SENDER_EMAIL.
-    Returns an empty string if the signature cannot be retrieved.
+    Falls back to GMAIL_SIGNATURE from settings if the API is unavailable.
     """
     try:
         url = f"{GMAIL_API}/settings/sendAs/{SENDER_EMAIL}"
@@ -117,12 +118,18 @@ def get_gmail_signature(session: AuthorizedSession) -> str:
         sig = resp.json().get("signature", "")
         if sig:
             print("  Gmail signature fetched successfully.")
-        else:
-            print("  Note: no signature found in Gmail settings for this address.")
-        return sig
+            return sig
+        # API returned no signature — fall through to static fallback
+        print("  Note: no signature found in Gmail settings for this address.")
     except Exception as exc:
-        print(f"  Warning: could not fetch Gmail signature ({exc}). Continuing without it.")
-        return ""
+        print(f"  Warning: could not fetch Gmail signature ({exc}).")
+
+    if GMAIL_SIGNATURE:
+        print("  Using static signature from GMAIL_SIGNATURE config.")
+        return GMAIL_SIGNATURE
+
+    print("  No signature available — sending without it.")
+    return ""
 
 
 # ---------------------------------------------------------------------------

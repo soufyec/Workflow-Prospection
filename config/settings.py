@@ -5,6 +5,7 @@ load_dotenv()
 
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "hello@dolmenstudios.com")
 SENDER_NAME = os.environ.get("SENDER_NAME", "Dõlmen Studios")
+GMAIL_SIGNATURE = os.environ.get("GMAIL_SIGNATURE", "")
 
 LINKEDIN_EMAIL = os.environ.get("LINKEDIN_EMAIL", "")
 LINKEDIN_PASSWORD = os.environ.get("LINKEDIN_PASSWORD", "")
