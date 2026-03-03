@@ -25,9 +25,14 @@ from bs4 import BeautifulSoup
 from src.utils.http_client import fetch_page, get_random_headers
 
 NEWS_FEEDS = [
+    # --- European focused ---
     {
-        "name": "TechCrunch Fundraising",
-        "url": "https://techcrunch.com/category/fundraising/feed/",
+        "name": "Tech.eu",
+        "url": "https://tech.eu/feed",
+    },
+    {
+        "name": "Sifted",
+        "url": "https://sifted.eu/feed",
     },
     {
         "name": "EU-Startups",
@@ -38,12 +43,29 @@ NEWS_FEEDS = [
         "url": "https://siliconcanals.com/feed/",
     },
     {
-        "name": "Tech.eu",
-        "url": "https://tech.eu/feed",
+        "name": "Maddyness",          # French startup ecosystem
+        "url": "https://www.maddyness.com/feed/",
+    },
+    # --- Global with European coverage ---
+    {
+        "name": "TechCrunch Europe",
+        "url": "https://techcrunch.com/tag/europe/feed/",
     },
     {
-        "name": "Sifted",
-        "url": "https://sifted.eu/feed",
+        "name": "TechCrunch Seed",    # Seed-funding tag — highly targeted
+        "url": "https://techcrunch.com/tag/seed-funding/feed/",
+    },
+    {
+        "name": "TechCrunch Fundraising",
+        "url": "https://techcrunch.com/category/fundraising/feed/",
+    },
+    {
+        "name": "Crunchbase News",
+        "url": "https://news.crunchbase.com/feed/",
+    },
+    {
+        "name": "VentureBeat",
+        "url": "https://venturebeat.com/feed/",
     },
 ]
 

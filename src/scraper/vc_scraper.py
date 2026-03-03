@@ -134,6 +134,18 @@ def extract_companies_from_html(html: str, vc_entry: dict, base_url: str) -> lis
                     companies.append(_build_record(name, href, vc_entry))
         return _dedup_by_domain(companies)
 
+    # Generic link texts that are navigation/CTA buttons, not company names
+    _GENERIC_LINK_TEXTS = frozenset([
+        "visit site", "visit website", "learn more", "read more", "see more",
+        "view more", "find out more", "more info", "more information",
+        "click here", "go to website", "open website", "website", "site",
+        "portfolio", "back", "next", "previous", "home", "contact", "apply",
+        "get in touch", "follow", "subscribe", "sign up", "log in", "login",
+        "read case study", "case study", "press release", "news", "view",
+        "lp login", "founder login", "fund", "invest", "our fund",
+        "deck", "pitch deck", "application", "apply now",
+    ])
+
     # Generic heuristic
     for a in soup.find_all("a", href=True):
         href = a["href"]
@@ -152,8 +164,13 @@ def extract_companies_from_html(html: str, vc_entry: dict, base_url: str) -> lis
             continue
         if EXCLUDED_PATTERNS.search(href) or EXCLUDED_PATTERNS.search(text):
             continue
+        if text.lower() in _GENERIC_LINK_TEXTS:
+            continue
 
         word_count = len(text.split())
+        # Reject long texts that contain years (card dumps) or status markers
+        if re.search(r"\b(201[0-9]|202[0-9])\b|RIP\b|Exited|Current\b", text):
+            continue
         if 1 <= word_count <= 6 and len(text) > 2:
             companies.append(_build_record(text, href, vc_entry))
 

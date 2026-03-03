@@ -23,10 +23,14 @@ from src.utils.pipeline_state import load_state, save_state
 EMAIL_REGEX = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")
 
 IGNORED_EMAIL_PATTERNS = re.compile(
-    r"\.(png|jpg|jpeg|gif|svg|pdf|css|js|woff|ttf)@"
-    r"|@sentry\.|@example\.|@domain\.|@test\."
+    # File extensions appearing before @ (obfuscated filenames)
+    r"\.(png|jpg|jpeg|gif|svg|pdf|css|js|woff|woff2|ttf|eot)@"
+    # File extensions appearing as TLD (false positives from image src attrs)
+    r"|@[^@]+\.(avif|webp|png|jpg|jpeg|gif|svg|ico|woff|ttf|css|js|map|min)$"
+    r"|@sentry\.|@example\.|@domain\.|@test\.|@company\."
     r"|noreply|no-reply|donotreply|unsubscribe"
-    r"|@wixpress\.|@squarespace\.|@shopify\.",
+    r"|@wixpress\.|@squarespace\.|@shopify\."
+    r"|^you@|^name@|^email@|^user@|^someone@",
     re.IGNORECASE,
 )
 
@@ -54,14 +58,28 @@ SUBPAGE_CANDIDATES = [
 ]
 
 
+# TLD suffixes that indicate a ROT13-encoded email (ROT13 of common real TLDs).
+# .com→.pbz  .io→.vb  .net→.arg  .org→.bet  .eu→.rh  .nl→.ay  .de→.qr  .co→.pb
+_ROT13_TLDS = re.compile(r"\.(pbz|vb|arg|bet|rh|ay|qr|pb|hx|fr|fr)$", re.IGNORECASE)
+
+
 def _decode_obfuscation(text: str) -> str:
-    """Decode common email obfuscation patterns."""
-    return (
+    """Decode common email obfuscation patterns including ROT13."""
+    decoded = (
         text
         .replace(" [at] ", "@").replace("[at]", "@").replace(" at ", "@")
         .replace(" [dot] ", ".").replace("[dot]", ".").replace("(dot)", ".")
         .replace(" DOT ", ".").replace(" AT ", "@")
     )
+    # ROT13: only attempt on tokens whose TLD looks ROT13-shifted
+    for cand in re.findall(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,4}\b", decoded):
+        tld_part = "." + cand.rsplit(".", 1)[-1]
+        if _ROT13_TLDS.search(tld_part):
+            import codecs
+            real = codecs.decode(cand, "rot_13")
+            if re.match(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,4}$", real):
+                decoded = decoded.replace(cand, real)
+    return decoded
 
 
 def find_emails_in_html(html: str) -> list:
@@ -209,14 +227,28 @@ def find_best_email_for_company(website: str) -> dict:
     # Normalize to https:// to avoid proxy issues with http://
     website = _normalize_url(website)
     base = website.rstrip("/")
-    candidate_urls = [base] + [base + path for path in SUBPAGE_CANDIDATES]
 
     all_hits: list = []  # (score, email, source_url, html)
 
-    for url in candidate_urls:
-        html = fetch_page(url)
-        if html and needs_js_rendering(html):
-            html = fetch_page_playwright(url)
+    # --- Homepage probe ---
+    # If the homepage is completely unreachable (Cloudflare / proxy block),
+    # skip all subpages and go straight to the MX fallback — saves ~80 s of
+    # Playwright timeouts per company.
+    homepage_html = fetch_page(base)
+    if homepage_html and needs_js_rendering(homepage_html):
+        homepage_html = fetch_page_playwright(base)
+
+    if not homepage_html:
+        return _guess_email_pattern(website)
+
+    # Homepage is reachable — scan it and then check high-value subpages
+    for url in [base] + [base + path for path in SUBPAGE_CANDIDATES]:
+        if url == base:
+            html = homepage_html  # already fetched
+        else:
+            html = fetch_page(url)
+            if html and needs_js_rendering(html):
+                html = fetch_page_playwright(url)
         if not html:
             continue
 
