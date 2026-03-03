@@ -191,15 +191,22 @@ def _scrape_vc_portfolio(vc: dict) -> list:
     return companies
 
 
+def _is_early_stage(company: dict) -> bool:
+    """Return True only for pre-seed or seed companies (excludes Series A/B/C+)."""
+    stage = company.get("funding_stage", "").lower().replace("_", "-")
+    return "seed" in stage and "series" not in stage
+
+
 def discover_companies(vc_list: Optional[list] = None) -> list:
     """
     Main entry point for Stage 1.
 
     1. For each VC: scrape portfolio page + LinkedIn posts (if enabled)
     2. Merge and deduplicate results
-    3. Persist incrementally to pipeline.json (crash-safe)
-    4. Filter out already-contacted companies
-    5. Return all newly discovered companies
+    3. Filter to pre-seed / seed funding stages only
+    4. Persist incrementally to pipeline.json (crash-safe)
+    5. Filter out already-contacted companies
+    6. Return all newly discovered companies
     """
     if vc_list is None:
         vc_list = load_vc_list()
@@ -214,6 +221,7 @@ def discover_companies(vc_list: Optional[list] = None) -> list:
             print(f"  [SKIP] {vc['name']} already processed")
             continue
         companies = _scrape_vc_portfolio(vc)
+        companies = [c for c in companies if _is_early_stage(c)]
         if companies:
             append_to_state_list(PIPELINE_PATH, "discovered", companies)
             portfolio_companies.extend(companies)
@@ -223,6 +231,7 @@ def discover_companies(vc_list: Optional[list] = None) -> list:
     try:
         from src.scraper.linkedin_scraper import discover_from_linkedin
         linkedin_companies = discover_from_linkedin(vc_list)
+        linkedin_companies = [c for c in linkedin_companies if _is_early_stage(c)]
         if linkedin_companies:
             append_to_state_list(PIPELINE_PATH, "discovered", linkedin_companies)
             print(f"  [LINKEDIN] Added {len(linkedin_companies)} companies from posts")
@@ -234,6 +243,7 @@ def discover_companies(vc_list: Optional[list] = None) -> list:
     try:
         from src.scraper.news_scraper import discover_from_news
         news_companies = discover_from_news()
+        news_companies = [c for c in news_companies if _is_early_stage(c)]
         if news_companies:
             append_to_state_list(PIPELINE_PATH, "discovered", news_companies)
             print(f"  [NEWS] Added {len(news_companies)} companies from news feeds")
@@ -245,6 +255,9 @@ def discover_companies(vc_list: Optional[list] = None) -> list:
     try:
         from src.scraper.apollo_scraper import discover_from_apollo
         apollo_companies = discover_from_apollo()
+        # Apollo already filters by stage at the API level, but apply the same
+        # guard here for consistency.
+        apollo_companies = [c for c in apollo_companies if _is_early_stage(c)]
         if apollo_companies:
             append_to_state_list(PIPELINE_PATH, "discovered", apollo_companies)
             print(f"  [APOLLO] Added {len(apollo_companies)} companies from Apollo.io")

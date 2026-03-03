@@ -22,7 +22,7 @@ import requests
 from config.settings import APOLLO_API_KEY
 
 APOLLO_BASE_URL = "https://api.apollo.io/v1"
-APOLLO_MIXED_COMPANIES_URL = f"{APOLLO_BASE_URL}/mixed_companies/search"
+APOLLO_ORGS_URL = f"{APOLLO_BASE_URL}/organizations/search"
 
 # Apollo funding stage identifiers (as used in Apollo's API)
 TARGET_FUNDING_STAGES = ["pre_seed", "seed"]
@@ -65,13 +65,13 @@ def _map_funding_stage(value: str) -> str:
 
 
 def _fetch_apollo_page(page: int) -> Optional[dict]:
-    """Call Apollo.io mixed_companies/search and return the parsed JSON response."""
+    """Call Apollo.io organizations/search and return the parsed JSON response."""
     headers = {
         "Content-Type": "application/json",
         "Cache-Control": "no-cache",
+        "X-Api-Key": APOLLO_API_KEY,
     }
     payload = {
-        "api_key": APOLLO_API_KEY,
         "funding_stage": TARGET_FUNDING_STAGES,
         "organization_locations": TARGET_LOCATIONS,
         "per_page": PER_PAGE,
@@ -79,7 +79,7 @@ def _fetch_apollo_page(page: int) -> Optional[dict]:
     }
     try:
         resp = requests.post(
-            APOLLO_MIXED_COMPANIES_URL,
+            APOLLO_ORGS_URL,
             json=payload,
             headers=headers,
             timeout=30,
@@ -90,6 +90,8 @@ def _fetch_apollo_page(page: int) -> Optional[dict]:
         status = e.response.status_code if e.response is not None else "?"
         if status == 401:
             print("  [APOLLO] 401 Unauthorized — check your APOLLO_API_KEY in .env")
+        elif status == 403:
+            print("  [APOLLO] 403 Forbidden — endpoint requires a paid Apollo plan")
         elif status == 422:
             print("  [APOLLO] 422 Unprocessable — check search parameters")
         else:
@@ -142,13 +144,13 @@ def discover_from_apollo() -> list:
                 continue
             seen_domains.add(domain)
 
-            # Funding stage
-            raw_stage = (
-                org.get("latest_funding_stage")
-                or org.get("funding_stage")
-                or "seed"
-            )
+            # Funding stage — skip companies without an explicit seed/pre-seed stage
+            raw_stage = org.get("latest_funding_stage") or org.get("funding_stage") or ""
+            if not raw_stage:
+                continue
             funding_stage = _map_funding_stage(str(raw_stage))
+            if "seed" not in funding_stage.lower():
+                continue
 
             # Industry — Apollo returns keyword tags
             keywords = org.get("keywords") or org.get("industry_tag_names") or []

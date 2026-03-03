@@ -16,6 +16,7 @@ import re
 import time
 import random
 import xml.etree.ElementTree as ET
+from typing import Optional
 from urllib.parse import urlparse
 
 import requests
@@ -136,8 +137,96 @@ def _infer_industry(text: str) -> str:
     return "tech"
 
 
+_ACTION_VERBS = (
+    r"(?:raises?|raised|secures?|secured|closes?|closed|lands?|gets?|receives?|announces?|bags?|wins?)"
+)
+
+# Pattern 1: "[Descriptor] [Company] raises €X" — captures just the company name after
+# common descriptor words (e.g. "AI startup Flink raises €5M")
+_DESCRIPTOR_PREFIX_RE = re.compile(
+    r"^(?:[\w\-]+\s+){1,4}"           # 1-4 generic descriptor words
+    r"(?P<name>[A-Z][A-Za-z0-9\-\.&']{1,30}(?:\s+[A-Z][A-Za-z0-9\-\.&']{1,20})?)"
+    r"\s+" + _ACTION_VERBS,
+    re.IGNORECASE,
+)
+
+# Pattern 2: "Company raises €X" — company name at the very start
+_DIRECT_RE = re.compile(
+    r"^(?P<name>[A-Z][A-Za-z0-9\-\.&' ]{1,40}?)\s+" + _ACTION_VERBS + r"\s+[€$£\d]",
+)
+
+# Pattern 3: "Company closes seed/pre-seed round"
+_SEED_ROUND_RE = re.compile(
+    r"^(?P<name>[A-Z][A-Za-z0-9\-\.&' ]{1,40}?)"
+    r"\s+(?:closes?|raises?|secures?)\s+(?:\w+\s+)?(?:seed|pre-seed)\s+(?:round|funding|investment)",
+    re.IGNORECASE,
+)
+
+_DESCRIPTOR_WORDS = frozenset([
+    "startup", "startups", "company", "companies", "platform", "app", "service",
+    "tool", "firm", "tech", "venture", "ai", "saas", "fintech", "healthtech",
+    "new", "the", "a", "an", "eu", "european", "dutch", "german", "french",
+    "speedy", "grocery", "ev", "software", "hardware",
+])
+
+_STOP_WORDS = frozenset([
+    "the", "a", "an", "this", "that", "these", "those", "new", "how", "why",
+    "when", "where", "what", "who", "which", "investors", "startup", "startups",
+    "company", "companies", "funding", "round", "series",
+])
+
+
+def _clean_company_name(name: str) -> str:
+    """Strip leading descriptor words from an extracted name."""
+    words = name.strip().rstrip(".,;:").split()
+    while words and words[0].lower() in _DESCRIPTOR_WORDS:
+        words = words[1:]
+    return " ".join(words)
+
+
+def _extract_company_from_text(title: str, description: str) -> Optional[dict]:
+    """
+    Extract a company name from the RSS headline/description using regex patterns.
+    Returns a minimal dict with 'name', or None if nothing found.
+    """
+    for text in (title, description):
+        text = re.sub(r"<[^>]+>", " ", text).strip()  # strip any HTML tags
+
+        # Try descriptor-prefix pattern first (e.g. "AI startup Flink raises")
+        m = _DESCRIPTOR_PREFIX_RE.match(text)
+        if m:
+            name = _clean_company_name(m.group("name"))
+            if name and 1 <= len(name.split()) <= 4 and name[0].isupper():
+                return {"name": name}
+
+        # Try seed-round pattern
+        m = _SEED_ROUND_RE.match(text)
+        if m:
+            name = _clean_company_name(m.group("name"))
+            if name and 1 <= len(name.split()) <= 4 and name[0].isupper():
+                return {"name": name}
+
+        # Try direct pattern
+        m = _DIRECT_RE.match(text)
+        if m:
+            name = _clean_company_name(m.group("name"))
+            words = name.split()
+            if (
+                1 <= len(words) <= 4
+                and words[0][0].isupper()
+                and words[0].lower() not in _STOP_WORDS
+            ):
+                return {"name": name}
+
+    return None
+
+
 def _extract_companies_from_article(article_url: str) -> list:
-    """Follow article link and extract company websites from the article body."""
+    """
+    Follow article link and extract company websites from the article body.
+    Returns a list of dicts with 'name', 'url', 'domain'.
+    Falls back gracefully when the page is behind a paywall (returns []).
+    """
     html = fetch_page(article_url)
     if not html:
         return []
@@ -242,15 +331,24 @@ def discover_from_news(max_articles_per_feed: int = MAX_ARTICLES_PER_FEED) -> li
         print(f"    → {len(funding_articles)} funding articles")
 
         for title, desc, link in funding_articles:
-            companies = _extract_companies_from_article(link)
             combined_text = f"{title} {desc}"
+            funding_stage = _infer_funding_stage(combined_text)
+
+            # Try following the article link first (may fail on paywalled sites)
+            companies = _extract_companies_from_article(link)
+
+            # Fallback: extract company name directly from headline text
+            if not companies:
+                text_match = _extract_company_from_text(title, desc)
+                if text_match:
+                    companies = [{"name": text_match["name"], "url": "", "domain": ""}]
 
             for co in companies:
                 all_companies.append({
                     "company_name": co["name"],
-                    "website": co["url"],
+                    "website": co.get("url", ""),
                     "vc_source": "",
-                    "funding_stage": _infer_funding_stage(combined_text),
+                    "funding_stage": funding_stage,
                     "industry": _infer_industry(combined_text),
                     "discovery_source": f"news:{feed['name']}",
                     "post_text": title[:300],
@@ -264,13 +362,14 @@ def discover_from_news(max_articles_per_feed: int = MAX_ARTICLES_PER_FEED) -> li
 
         time.sleep(random.uniform(1.0, 2.0))
 
-    # Deduplicate by domain
+    # Deduplicate by domain (or by company name when no website found)
     seen = set()
     unique = []
     for co in all_companies:
-        domain = urlparse(co["website"]).netloc
-        if domain and domain not in seen:
-            seen.add(domain)
+        domain = urlparse(co["website"]).netloc if co.get("website") else ""
+        key = domain if domain else co["company_name"].lower()
+        if key and key not in seen:
+            seen.add(key)
             unique.append(co)
 
     print(f"  [NEWS] Total unique companies from news: {len(unique)}")
