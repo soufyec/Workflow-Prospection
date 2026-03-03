@@ -13,9 +13,10 @@ import re
 from typing import Optional
 from urllib.parse import urljoin, urlparse
 
+import requests
 from bs4 import BeautifulSoup
 
-from config.settings import PIPELINE_PATH
+from config.settings import APOLLO_API_KEY, PIPELINE_PATH
 from src.utils.http_client import fetch_page, fetch_page_playwright, needs_js_rendering
 from src.utils.pipeline_state import load_state, save_state
 
@@ -139,6 +140,55 @@ def _guess_email_pattern(website: str) -> dict:
     }
 
 
+def _normalize_url(url: str) -> str:
+    """Ensure URL uses https:// and strip www. prefix for consistency."""
+    url = url.strip()
+    if not url.startswith("http"):
+        url = f"https://{url}"
+    # Upgrade http → https
+    url = re.sub(r"^http://", "https://", url)
+    # Strip www. from netloc
+    parsed = urlparse(url)
+    netloc = re.sub(r"^www\.", "", parsed.netloc)
+    return f"https://{netloc}"
+
+
+def _lookup_website_by_name(company_name: str) -> Optional[str]:
+    """
+    Search Apollo.io organizations by name to find a company's website.
+    Returns the best-matching website URL (https, no www), or None.
+    Prefers small organisations (< 200 employees) to avoid matching large corps.
+    """
+    if not APOLLO_API_KEY:
+        return None
+    try:
+        resp = requests.post(
+            "https://api.apollo.io/v1/organizations/search",
+            json={"q_organization_name": company_name, "per_page": 5, "page": 1},
+            headers={"Content-Type": "application/json", "X-Api-Key": APOLLO_API_KEY},
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            return None
+        orgs = resp.json().get("organizations") or []
+        # Sort candidates by employee count ascending (smallest = most likely startup)
+        candidates = []
+        for org in orgs:
+            name_match = (org.get("name") or "").lower()
+            if company_name.lower() not in name_match and name_match not in company_name.lower():
+                continue
+            website = org.get("website_url") or org.get("primary_domain") or ""
+            emp = org.get("estimated_num_employees") or 9999
+            if website and emp < 200:
+                candidates.append((emp, website))
+        if candidates:
+            candidates.sort(key=lambda x: x[0])
+            return _normalize_url(candidates[0][1])
+    except Exception:
+        pass
+    return None
+
+
 _INVALID_WEBSITE_RE = re.compile(
     r"\.(pdf|zip|doc|docx|xls|xlsx|ppt|pptx)(\?|$)"
     r"|cdn\.prod\.website-files\.com"
@@ -156,6 +206,8 @@ def find_best_email_for_company(website: str) -> dict:
     if not website or _INVALID_WEBSITE_RE.search(website):
         return {"stakeholder_email": None, "stakeholder_name": None, "email_source_url": None}
 
+    # Normalize to https:// to avoid proxy issues with http://
+    website = _normalize_url(website)
     base = website.rstrip("/")
     candidate_urls = [base] + [base + path for path in SUBPAGE_CANDIDATES]
 
@@ -199,7 +251,15 @@ def enrich_companies() -> list:
     enriched_websites = {c["website"] for c in state.get("enriched", [])}
     enriched = list(state.get("enriched", []))
 
-    # Skip companies with no website (discovered from LinkedIn with no URL)
+    # For companies without a website, try to find one via Apollo name search
+    for company in discovered:
+        if not company.get("website"):
+            found = _lookup_website_by_name(company["company_name"])
+            if found:
+                company["website"] = found
+                print(f"  [WEBSITE] {company['company_name']} → {found} (via Apollo lookup)")
+
+    # Skip companies with no website after lookup attempt
     to_process = [c for c in discovered if c.get("website") and c["website"] not in enriched_websites]
 
     if not to_process:
