@@ -2,7 +2,7 @@
 Dõlmen Studios — Prospection Email Automation
 
 Usage:
-  python main.py --step discover   # Scrape VC portfolios + LinkedIn posts
+  python main.py --step discover   # Scrape VC portfolios + LinkedIn posts + Apollo
   python main.py --step enrich     # Find stakeholder emails on company websites
   python main.py --step generate   # Render personalized emails from template
   python main.py --step review     # Generate review CSV + HTML preview
@@ -13,11 +13,12 @@ Usage:
   python main.py --reset           # Clear pipeline state (start fresh)
 
   # Optional flags for --step send:
-  python main.py --step send --review-file review/review_20240301_120000.csv
+  python main.py --step send --review-file review/review_20260302_corrected.csv
   python main.py --step send --send-now              # Send immediately (testing)
   python main.py --step send --schedule-at tomorrow  # Tomorrow at 09:00
   python main.py --step send --schedule-at "2026-03-10"        # That date at 09:00
   python main.py --step send --schedule-at "2026-03-10 14:30"  # Exact time
+  python main.py --step send --create-drafts         # Save as Gmail Drafts (review before sending)
 """
 
 import argparse
@@ -67,6 +68,13 @@ def cmd_send(args):
         print("  [ERROR] No review file found.")
         print("  Run --step review first, or pass --review-file <path>")
         sys.exit(1)
+
+    create_drafts = getattr(args, "create_drafts", False)
+
+    if create_drafts:
+        from src.sender.gmail_sender import create_drafts_from_review
+        create_drafts_from_review(review_file)
+        return
 
     send_now = getattr(args, "send_now", False)
     schedule_at = getattr(args, "schedule_at", None)
@@ -163,6 +171,14 @@ def main():
             "Values: 'tomorrow', 'YYYY-MM-DD', 'YYYY-MM-DD HH:MM'. "
             "Default (omitted): next Monday at 09:00."
         ),
+    )
+    parser.add_argument(
+        "--create-drafts",
+        action="store_true",
+        default=False,
+        dest="create_drafts",
+        help="Save approved emails as Gmail Drafts instead of sending. "
+             "Review and send them manually from your Gmail Drafts folder.",
     )
 
     args = parser.parse_args()

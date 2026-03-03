@@ -240,6 +240,17 @@ def discover_companies(vc_list: Optional[list] = None) -> list:
     except Exception as e:
         print(f"  [SKIP] News feed scraping failed: {e}")
 
+    # --- Apollo.io scraping (pre-seed & seed startups) ---
+    print("\n  Starting Apollo.io discovery...")
+    try:
+        from src.scraper.apollo_scraper import discover_from_apollo
+        apollo_companies = discover_from_apollo()
+        if apollo_companies:
+            append_to_state_list(PIPELINE_PATH, "discovered", apollo_companies)
+            print(f"  [APOLLO] Added {len(apollo_companies)} companies from Apollo.io")
+    except Exception as e:
+        print(f"  [SKIP] Apollo.io scraping failed: {e}")
+
     # Load full discovered list from state (includes previous runs)
     state = load_state(PIPELINE_PATH)
     all_discovered = state.get("discovered", [])

@@ -5,14 +5,19 @@ Authentication:
 - Uses credentials/credentials.json (Desktop App OAuth2 client secret)
 - Caches token in credentials/token.json (auto-refreshed when expired)
 - On first run, opens a browser window for OAuth2 consent
-- Scopes: gmail.send + gmail.settings.basic (for fetching Gmail signature)
+- Scopes: gmail.send + gmail.settings.basic + gmail.compose
 
 NOTE: If you had a token.json from a previous version, delete it and re-run
-so Gmail re-authorises with the new gmail.settings.basic scope.
+so Gmail re-authorises with the updated scopes.
 
 Scheduling:
 - By default, emails are queued and sent on the next Monday at 09:00 local time
 - Pass send_now=True (or --send-now CLI flag) to send immediately (useful for testing)
+
+Drafts mode:
+- Pass create_drafts=True (or --create-drafts CLI flag) to save emails as Gmail drafts.
+- Drafts appear in your Gmail Drafts folder — review each one and click Send when ready.
+- NOTE: If token.json was created without gmail.compose scope, delete it and re-run.
 """
 
 import base64
@@ -41,12 +46,13 @@ from config.settings import (
 from src.utils.deduplication import append_sent_log
 from src.utils.pipeline_state import load_state, save_state
 
-# gmail.settings.basic is required to read the account signature via the API.
-# If your existing token.json was created with only gmail.send, delete it so
-# the OAuth flow re-runs and grants the new scope.
+# gmail.compose is required to create drafts via the API.
+# If your existing token.json was created without this scope, delete it so
+# the OAuth flow re-runs and grants all scopes.
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/gmail.settings.basic",
+    "https://www.googleapis.com/auth/gmail.compose",
 ]
 
 # Timezone used for the Monday 09:00 schedule
@@ -298,6 +304,63 @@ def _do_send(review_file: str) -> None:
 
     print(f"\n  Sent: {success_count}  |  Failed: {fail_count}")
     print(f"  Audit log: {SENT_LOG_PATH}")
+
+
+# ---------------------------------------------------------------------------
+# Draft creation
+# ---------------------------------------------------------------------------
+
+def _do_create_drafts(review_file: str) -> None:
+    """
+    Authenticate and create Gmail drafts for all approved emails.
+    Drafts appear in your Gmail Drafts folder ready to review and send.
+    """
+    from src.reviewer.review import load_approved_from_review
+
+    approved = load_approved_from_review(review_file)
+    if not approved:
+        print("  [INFO] No approved emails found in the review file.")
+        return
+
+    print(f"\n  Creating {len(approved)} draft(s) in Gmail…")
+    service = get_gmail_service()
+    signature_html = get_gmail_signature(service)
+
+    success_count = 0
+    fail_count = 0
+
+    for company in approved:
+        email_addr = company.get("stakeholder_email", "").strip()
+        if not email_addr:
+            print(f"  [SKIP] {company.get('company_name')} — no email address")
+            continue
+
+        try:
+            raw = build_mime_email(company, signature_html)
+            resp = service.post(
+                f"{GMAIL_API}/drafts",
+                json={"message": {"raw": raw}},
+            )
+            resp.raise_for_status()
+            draft_id = resp.json().get("id", "?")
+            success_count += 1
+            print(f"  [DRAFT] {company.get('company_name')} → {email_addr}  (id: {draft_id})")
+
+        except Exception as e:
+            fail_count += 1
+            print(f"  [FAIL] {company.get('company_name')}: {e}")
+
+    print(f"\n  Drafts created: {success_count}  |  Failed: {fail_count}")
+    if success_count:
+        print("  → Open Gmail → Drafts to review and send each email.")
+
+
+def create_drafts_from_review(review_file: str) -> None:
+    """
+    Entry point for --create-drafts mode.
+    Creates Gmail drafts instead of sending, so you can review before sending.
+    """
+    _do_create_drafts(review_file)
 
 
 # ---------------------------------------------------------------------------

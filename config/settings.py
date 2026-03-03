@@ -5,6 +5,9 @@ load_dotenv()
 
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "hello@dolmenstudios.com")
 SENDER_NAME = os.environ.get("SENDER_NAME", "Dõlmen Studios")
+
+# Apollo.io API key — get yours at https://developer.apollo.io/
+APOLLO_API_KEY = os.environ.get("APOLLO_API_KEY", "")
 GMAIL_SIGNATURE = os.environ.get("GMAIL_SIGNATURE", "")
 
 LINKEDIN_EMAIL = os.environ.get("LINKEDIN_EMAIL", "")
