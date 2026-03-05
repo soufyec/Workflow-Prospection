@@ -427,5 +427,104 @@
     "focus_sector": "saas b2b",
     "scrape_strategy": "static",
     "company_selector": null
+  },
+  {
+    "name": "Y Combinator",
+    "url": "https://www.ycombinator.com",
+    "portfolio_url": "https://www.ycombinator.com/companies?batch=W25&batch=S24",
+    "linkedin_url": "https://www.linkedin.com/company/y-combinator/posts/",
+    "scrape_linkedin": false,
+    "typical_stage": "pre-seed seed",
+    "focus_sector": "saas b2b consumer deeptech",
+    "scrape_strategy": "js",
+    "company_selector": null
+  },
+  {
+    "name": "500 Global",
+    "url": "https://500.co",
+    "portfolio_url": "https://500.co/companies",
+    "linkedin_url": "https://www.linkedin.com/company/500-startups/posts/",
+    "scrape_linkedin": false,
+    "typical_stage": "pre-seed seed",
+    "focus_sector": "saas fintech consumer",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "Precursor Ventures",
+    "url": "https://precursorvc.com",
+    "portfolio_url": "https://precursorvc.com/portfolio/",
+    "linkedin_url": "https://www.linkedin.com/company/precursor-ventures/posts/",
+    "scrape_linkedin": false,
+    "typical_stage": "pre-seed",
+    "focus_sector": "saas b2b consumer",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "Hustle Fund",
+    "url": "https://www.hustlefund.vc",
+    "portfolio_url": "https://www.hustlefund.vc/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/hustle-fund/posts/",
+    "scrape_linkedin": false,
+    "typical_stage": "pre-seed",
+    "focus_sector": "saas b2b",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "Pear VC",
+    "url": "https://pear.vc",
+    "portfolio_url": "https://pear.vc/portfolio/",
+    "linkedin_url": "https://www.linkedin.com/company/pear-vc/posts/",
+    "scrape_linkedin": false,
+    "typical_stage": "pre-seed seed",
+    "focus_sector": "saas b2b deeptech",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "Techstars",
+    "url": "https://www.techstars.com",
+    "portfolio_url": "https://www.techstars.com/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/techstars/posts/",
+    "scrape_linkedin": false,
+    "typical_stage": "pre-seed seed",
+    "focus_sector": "saas fintech healthtech",
+    "scrape_strategy": "js",
+    "company_selector": null
+  },
+  {
+    "name": "Initialized Capital",
+    "url": "https://initialized.com",
+    "portfolio_url": "https://initialized.com/portfolio/",
+    "linkedin_url": "https://www.linkedin.com/company/initialized-capital/posts/",
+    "scrape_linkedin": false,
+    "typical_stage": "seed",
+    "focus_sector": "saas b2b consumer",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "First Round Capital",
+    "url": "https://firstround.com",
+    "portfolio_url": "https://firstround.com/companies/",
+    "linkedin_url": "https://www.linkedin.com/company/first-round-capital/posts/",
+    "scrape_linkedin": false,
+    "typical_stage": "seed",
+    "focus_sector": "saas b2b marketplace",
+    "scrape_strategy": "static",
+    "company_selector": null
+  },
+  {
+    "name": "Bessemer Venture Partners",
+    "url": "https://www.bvp.com",
+    "portfolio_url": "https://www.bvp.com/portfolio",
+    "linkedin_url": "https://www.linkedin.com/company/bessemer-venture-partners/posts/",
+    "scrape_linkedin": false,
+    "typical_stage": "seed",
+    "focus_sector": "saas cloud fintech",
+    "scrape_strategy": "static",
+    "company_selector": null
   }
 ]
