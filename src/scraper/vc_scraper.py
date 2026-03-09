@@ -23,7 +23,8 @@ from src.utils.pipeline_state import append_to_state_list, load_state
 EXCLUDED_PATTERNS = re.compile(
     r"linkedin|twitter|instagram|facebook|crunchbase|angellist|angel\.co"
     r"|careers|jobs|privacy|terms|contact|about|team|blog|news|press"
-    r"|medium\.com|techcrunch|youtube|vimeo|spotify",
+    r"|medium\.com|techcrunch|youtube|vimeo|spotify"
+    r"|efrontcloud|investorportal|investor-portal",
     re.IGNORECASE,
 )
 
@@ -146,6 +147,11 @@ def extract_companies_from_html(html: str, vc_entry: dict, base_url: str) -> lis
         "deck", "pitch deck", "application", "apply now",
     ])
 
+    # Derive VC root domain (e.g. "nautacapital.com") to also block subdomains
+    vc_root_domain = ".".join(vc_domain.split(".")[-2:])
+    # Normalised VC name slug for self-reference detection (e.g. "nordicninja")
+    vc_name_slug = re.sub(r"[^a-z0-9]", "", vc_entry.get("name", "").lower())
+
     # Generic heuristic
     for a in soup.find_all("a", href=True):
         href = a["href"]
@@ -160,8 +166,17 @@ def extract_companies_from_html(html: str, vc_entry: dict, base_url: str) -> lis
             continue
 
         parsed = urlparse(href)
-        if parsed.netloc == vc_domain:
+        netloc = parsed.netloc.lower()
+
+        # Block VC's own domain AND any of its subdomains
+        if netloc == vc_domain or netloc.endswith("." + vc_root_domain):
             continue
+
+        # Block links whose domain clearly contains the VC name (self-references)
+        netloc_slug = re.sub(r"[^a-z0-9]", "", netloc)
+        if vc_name_slug and len(vc_name_slug) >= 5 and vc_name_slug in netloc_slug:
+            continue
+
         if EXCLUDED_PATTERNS.search(href) or EXCLUDED_PATTERNS.search(text):
             continue
         if text.lower() in _GENERIC_LINK_TEXTS:
@@ -170,6 +185,9 @@ def extract_companies_from_html(html: str, vc_entry: dict, base_url: str) -> lis
         word_count = len(text.split())
         # Reject long texts that contain years (card dumps) or status markers
         if re.search(r"\b(201[0-9]|202[0-9])\b|RIP\b|Exited|Current\b", text):
+            continue
+        # Reject CamelCase-concatenated text (scraper artefact, e.g. "AldaraAllActiveWe tried")
+        if re.search(r"(?:[a-z][A-Z]){2,}", text):
             continue
         if 1 <= word_count <= 6 and len(text) > 2:
             companies.append(_build_record(text, href, vc_entry))
@@ -287,5 +305,9 @@ def discover_companies(vc_list: Optional[list] = None) -> list:
 
     # Filter already-contacted companies
     new_companies = filter_new_companies(all_discovered, SENT_LOG_PATH)
+
+    # Global dedup by root domain across all sources (prevents cross-source duplicates)
+    new_companies = _dedup_by_domain(new_companies)
+
     print(f"\n  Total discovered: {len(all_discovered)} | New (not yet contacted): {len(new_companies)}")
     return new_companies
