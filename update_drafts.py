@@ -7,15 +7,15 @@ Fixes applied automatically:
   - Corrects garbled company names caused by scraping artifacts
   - Removes sender name after the sign-off (leaves only "Kind regards,")
 
-Steps:
-  1. Load approved rows from the review CSV and apply fixes in memory
-  2. Authenticate with Gmail
-  3. Delete ALL existing drafts in the account
-  4. Create new drafts from the fixed data
+Modes:
+  Default (drafts): Delete all existing drafts and recreate with fixes applied.
+  --send-now:       Send the fixed emails immediately via Gmail API.
 
 Usage:
   python update_drafts.py
   python update_drafts.py --review-file review/review_20260310_032500.csv
+  python update_drafts.py --send-now
+  python update_drafts.py --review-file review/review_20260310_032500.csv --send-now
 """
 
 import argparse
@@ -120,12 +120,44 @@ def create_drafts(service, approved: list, signature_html: str) -> tuple[int, in
     return success, fail
 
 
+def send_emails(service, approved: list, signature_html: str) -> tuple[int, int]:
+    """Send all approved emails immediately via Gmail API. Returns (success, fail)."""
+    success, fail = 0, 0
+
+    for company in approved:
+        email_addr = company.get("stakeholder_email", "").strip()
+        if not email_addr:
+            print(f"  [SKIP] {company.get('company_name')} — no email address")
+            continue
+
+        try:
+            raw = build_mime_email(company, signature_html)
+            resp = service.post(
+                f"{GMAIL_API}/messages/send",
+                json={"raw": raw},
+            )
+            resp.raise_for_status()
+            success += 1
+            print(f"  [SENT] {company.get('company_name')} → {email_addr}")
+        except Exception as e:
+            fail += 1
+            print(f"  [FAIL] {company.get('company_name')}: {e}")
+
+    return success, fail
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Delete existing Gmail drafts and recreate with fixed content.")
+    parser = argparse.ArgumentParser(description="Apply fixes to approved emails, then create drafts or send.")
     parser.add_argument(
         "--review-file",
         default=DEFAULT_REVIEW_FILE,
         help=f"Path to the review CSV (default: {DEFAULT_REVIEW_FILE})",
+    )
+    parser.add_argument(
+        "--send-now",
+        action="store_true",
+        default=False,
+        help="Send emails immediately instead of creating drafts.",
     )
     args = parser.parse_args()
 
@@ -136,32 +168,49 @@ def main():
         print("  [ERROR] No approved emails found in the review file.")
         sys.exit(1)
 
-    print(f"  Approved emails to recreate: {len(approved)}")
+    print(f"  Approved emails: {len(approved)}")
 
-    confirm = input(
-        "\n  This will DELETE all existing drafts in your Gmail account\n"
-        "  and recreate them from the fixed CSV.\n"
-        "  Type 'yes' to continue: "
-    ).strip().lower()
+    if args.send_now:
+        confirm = input(
+            f"\n  This will SEND {len(approved)} email(s) immediately.\n"
+            "  Type 'yes' to continue: "
+        ).strip().lower()
+        if confirm != "yes":
+            print("  Aborted.")
+            sys.exit(0)
 
-    if confirm != "yes":
-        print("  Aborted.")
-        sys.exit(0)
+        print("\n=== Step 1: Authenticate ===")
+        service = get_gmail_service()
+        signature_html = get_gmail_signature(service)
 
-    print("\n=== Step 1: Authenticate ===")
-    service = get_gmail_service()
-    signature_html = get_gmail_signature(service)
+        print(f"\n=== Step 2: Send {len(approved)} email(s) ===")
+        success, fail = send_emails(service, approved, signature_html)
 
-    print("\n=== Step 2: Delete existing drafts ===")
-    deleted = delete_all_drafts(service)
-    print(f"  Deleted: {deleted} draft(s)")
+        print(f"\n  Done — Sent: {success}  |  Failed: {fail}")
+    else:
+        confirm = input(
+            "\n  This will DELETE all existing drafts in your Gmail account\n"
+            "  and recreate them from the fixed CSV.\n"
+            "  Type 'yes' to continue: "
+        ).strip().lower()
+        if confirm != "yes":
+            print("  Aborted.")
+            sys.exit(0)
 
-    print(f"\n=== Step 3: Create {len(approved)} new draft(s) ===")
-    success, fail = create_drafts(service, approved, signature_html)
+        print("\n=== Step 1: Authenticate ===")
+        service = get_gmail_service()
+        signature_html = get_gmail_signature(service)
 
-    print(f"\n  Done — Created: {success}  |  Failed: {fail}")
-    if success:
-        print("  → Open Gmail → Drafts to review and send each email.")
+        print("\n=== Step 2: Delete existing drafts ===")
+        deleted = delete_all_drafts(service)
+        print(f"  Deleted: {deleted} draft(s)")
+
+        print(f"\n=== Step 3: Create {len(approved)} new draft(s) ===")
+        success, fail = create_drafts(service, approved, signature_html)
+
+        print(f"\n  Done — Created: {success}  |  Failed: {fail}")
+        if success:
+            print("  → Open Gmail → Drafts to review and send each email.")
 
 
 if __name__ == "__main__":
