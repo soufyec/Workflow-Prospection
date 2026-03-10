@@ -5,7 +5,7 @@ Authentication:
 - Uses credentials/credentials.json (Desktop App OAuth2 client secret)
 - Caches token in credentials/token.json (auto-refreshed when expired)
 - On first run, opens a browser window for OAuth2 consent
-- Scopes: gmail.send + gmail.settings.basic + gmail.compose
+- Scopes: gmail.send + gmail.compose
 
 NOTE: If you had a token.json from a previous version, delete it and re-run
 so Gmail re-authorises with the updated scopes.
@@ -51,7 +51,6 @@ from src.utils.pipeline_state import load_state, save_state
 # the OAuth flow re-runs and grants all scopes.
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
-    "https://www.googleapis.com/auth/gmail.settings.basic",
     "https://www.googleapis.com/auth/gmail.compose",
 ]
 
