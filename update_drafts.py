@@ -5,6 +5,7 @@ Fixes applied automatically:
   - Removes all em-dashes (' — ') from email bodies (replaced with ', ')
   - Removes all em-dashes (' — ') from email subjects (replaced with ': ')
   - Corrects garbled company names caused by scraping artifacts
+  - Removes sender name after the sign-off (leaves only "Kind regards,")
 
 Steps:
   1. Load approved rows from the review CSV and apply fixes in memory
@@ -20,6 +21,7 @@ Usage:
 import argparse
 import csv
 import os
+import re
 import sys
 
 from src.sender.gmail_sender import get_gmail_service, build_mime_email, get_gmail_signature, GMAIL_API
@@ -55,6 +57,8 @@ def load_and_fix_approved(review_file: str) -> list:
             r["email_subject"] = r["email_subject"].replace(" — ", ": ").replace(old_name, new_name)
             # Fix body: ' — ' → ', ', then fix company name
             r["email_body"] = r["email_body"].replace(" — ", ", ").replace(old_name, new_name)
+            # Remove sender name after sign-off (e.g. "<br>\n    <strong>Soufyan</strong>")
+            r["email_body"] = re.sub(r"<br\s*/?>\s*<strong>[^<]+</strong>", "", r["email_body"])
             approved.append(r)
 
     return approved
