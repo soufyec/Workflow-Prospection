@@ -1,25 +1,63 @@
 """
-Update Gmail Drafts from fixed review CSV.
+Update Gmail Drafts from a review CSV, applying content fixes on the fly.
+
+Fixes applied automatically:
+  - Removes all em-dashes (' — ') from email bodies (replaced with ', ')
+  - Removes all em-dashes (' — ') from email subjects (replaced with ': ')
+  - Corrects garbled company names caused by scraping artifacts
 
 Steps:
-  1. Authenticate with Gmail
-  2. Delete ALL existing drafts in the account
-  3. Create new drafts from the approved rows in the fixed CSV
+  1. Load approved rows from the review CSV and apply fixes in memory
+  2. Authenticate with Gmail
+  3. Delete ALL existing drafts in the account
+  4. Create new drafts from the fixed data
 
 Usage:
   python update_drafts.py
-  python update_drafts.py --review-file review/review_20260310_032500_fixed.csv
+  python update_drafts.py --review-file review/review_20260310_032500.csv
 """
 
 import argparse
+import csv
+import os
 import sys
 
 from src.sender.gmail_sender import get_gmail_service, build_mime_email, get_gmail_signature, GMAIL_API
-from src.reviewer.review import load_approved_from_review
-from config.settings import PIPELINE_PATH
-from src.utils.pipeline_state import load_state
 
-DEFAULT_REVIEW_FILE = "review/review_20260310_032500_fixed.csv"
+DEFAULT_REVIEW_FILE = "review/review_20260310_032500.csv"
+
+# Scraping artifacts → clean company names
+NAME_FIXES = {
+    "Tidal Control B.V.Security Compliance Automation Platform": "Tidal Control",
+    "Solease B.V.Zonnestroom voor particulieren.": "Solease",
+    "Maria01Lapinlahdenkatu 1600180 HelsinkiFinland": "Maria01",
+    "AldaraAllActiveWe triedModern homeowner management": "Lumo",
+}
+
+
+def load_and_fix_approved(review_file: str) -> list:
+    """Load approved rows from review CSV and apply content fixes in memory."""
+    if not os.path.exists(review_file):
+        print(f"  [ERROR] Review file not found: {review_file}")
+        return []
+
+    approved = []
+    with open(review_file, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row.get("review_status", "").strip().lower() != "approved":
+                continue
+            r = dict(row)
+            old_name = r["company_name"]
+            new_name = NAME_FIXES.get(old_name, old_name)
+            r["company_name"] = new_name
+            # Fix subject: ' — ' → ': ', then fix company name
+            r["email_subject"] = r["email_subject"].replace(" — ", ": ").replace(old_name, new_name)
+            # Fix body: ' — ' → ', ', then fix company name
+            r["email_body"] = r["email_body"].replace(" — ", ", ").replace(old_name, new_name)
+            approved.append(r)
+
+    return approved
 
 
 def delete_all_drafts(service) -> int:
@@ -79,17 +117,17 @@ def create_drafts(service, approved: list, signature_html: str) -> tuple[int, in
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Delete existing Gmail drafts and recreate from fixed CSV.")
+    parser = argparse.ArgumentParser(description="Delete existing Gmail drafts and recreate with fixed content.")
     parser.add_argument(
         "--review-file",
         default=DEFAULT_REVIEW_FILE,
-        help=f"Path to the fixed review CSV (default: {DEFAULT_REVIEW_FILE})",
+        help=f"Path to the review CSV (default: {DEFAULT_REVIEW_FILE})",
     )
     args = parser.parse_args()
 
     print(f"\n  Review file: {args.review_file}")
 
-    approved = load_approved_from_review(args.review_file)
+    approved = load_and_fix_approved(args.review_file)
     if not approved:
         print("  [ERROR] No approved emails found in the review file.")
         sys.exit(1)
