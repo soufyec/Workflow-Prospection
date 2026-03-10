@@ -52,7 +52,6 @@ from src.utils.pipeline_state import load_state, save_state
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/gmail.compose",
-    "https://www.googleapis.com/auth/gmail.readonly",
 ]
 
 # Timezone used for the Monday 09:00 schedule
