@@ -4,11 +4,11 @@ Follow-up email system for Dõlmen Studios prospection pipeline.
 Workflow:
   1. Run: python main.py --step followup
   2. The system reads followup_log.csv (populated by --step draft)
-  3. For each contact it checks Gmail for any incoming reply
-  4. If no reply and enough days have elapsed, it creates a Gmail draft
-     for the appropriate follow-up (FU1 → FU2 → FU3)
-  5. Review the drafts in Gmail, then send with:
-     python update_drafts.py --send-drafts
+  3. For each contact with a due follow-up, it creates a Gmail draft
+  4. Review the drafts in Gmail — delete the ones you don't want to send
+  5. Send the rest with: python update_drafts.py --send-drafts
+
+  To permanently skip a contact, set replied=yes in followup_log.csv.
 
 Timing (configurable via .env):
   FOLLOWUP_1_DAYS=5   (default)
@@ -81,26 +81,6 @@ def _days_since(ts_str: str) -> Optional[float]:
         return None
 
 
-def _has_reply(service, email_addr: str, since_ts_str: str) -> bool:
-    """
-    Return True if Gmail contains any message FROM email_addr received after since_ts_str.
-    Uses Gmail search: from:{email_addr} after:{unix_epoch}.
-    """
-    try:
-        dt = datetime.fromisoformat(since_ts_str)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        epoch = int(dt.timestamp())
-        query = f"from:{email_addr} after:{epoch}"
-        resp = service.get(f"{GMAIL_API}/messages", params={"q": query, "maxResults": 1})
-        resp.raise_for_status()
-        data = resp.json()
-        return bool(data.get("messages"))
-    except Exception as exc:
-        print(f"    [WARN] Could not check replies for {email_addr}: {exc}")
-        return False
-
-
 def _render_followup(template_path: str, company: dict) -> str:
     """Render a follow-up template and return the HTML body string."""
     from src.generator.email_generator import get_first_name, get_industry_label
@@ -138,8 +118,11 @@ def _create_draft(service, company: dict, body_html: str, subject: str, signatur
 
 def run_followups() -> None:
     """
-    Check each contact in followup_log.csv, detect replies, and create Gmail
-    drafts for whichever follow-up is due.
+    For each contact in followup_log.csv, create a Gmail draft for whichever
+    follow-up is due. No reply detection — review and delete unwanted drafts
+    in Gmail before running --send-drafts.
+
+    To permanently exclude a contact, set replied=yes in followup_log.csv.
     """
     records = _load_followup_log()
     if not records:
@@ -160,7 +143,7 @@ def run_followups() -> None:
     ]
 
     drafted = 0
-    skipped_replied = 0
+    skipped_excluded = 0
     skipped_not_due = 0
     skipped_done = 0
     errors = 0
@@ -172,19 +155,12 @@ def run_followups() -> None:
         if not email_addr:
             continue
 
-        # Skip if already replied
+        # Skip contacts manually marked as excluded
         if rec.get("replied", "no").lower() == "yes":
-            skipped_replied += 1
+            skipped_excluded += 1
             continue
 
-        # Check for reply from this contact
-        if _has_reply(service, email_addr, rec.get("initial_sent_at", "")):
-            print(f"  [REPLY] {company_name} — reply detected, skipping follow-ups.")
-            rec["replied"] = "yes"
-            skipped_replied += 1
-            continue
-
-        # All 3 follow-ups already sent
+        # All 3 follow-ups already drafted
         if rec.get("fu3_sent_at"):
             skipped_done += 1
             continue
@@ -192,9 +168,9 @@ def run_followups() -> None:
         # Determine which follow-up is next and whether it's due
         for fu_field, threshold_days, template_path, label in fu_configs:
             if rec.get(fu_field):
-                continue  # Already sent this one
+                continue  # Already drafted this one
 
-            # The clock starts from the previous step
+            # Clock starts from the previous step
             if label == "FU1":
                 reference_ts = rec.get("initial_sent_at", "")
             elif label == "FU2":
@@ -204,7 +180,7 @@ def run_followups() -> None:
 
             days_elapsed = _days_since(reference_ts)
             if days_elapsed is None or days_elapsed < threshold_days:
-                due_in = (threshold_days - (days_elapsed or 0))
+                due_in = threshold_days - (days_elapsed or 0)
                 print(
                     f"  [WAIT]  {company_name} — {label} not due yet "
                     f"(due in ~{due_in:.1f} day(s))"
@@ -212,7 +188,7 @@ def run_followups() -> None:
                 skipped_not_due += 1
                 break  # Don't check later follow-ups for this contact
 
-            # It's due — create the draft
+            # Due — create the draft
             try:
                 body_html = _render_followup(template_path, rec)
                 subject = f"Re: Branding opportunity — {company_name} × Dõlmen Studios"
@@ -231,11 +207,12 @@ def run_followups() -> None:
     _save_followup_log(records)
 
     print(f"\n  Follow-up drafts created: {drafted}")
-    print(f"  Replied (skipped):        {skipped_replied}")
     print(f"  Not due yet:              {skipped_not_due}")
     print(f"  All follow-ups done:      {skipped_done}")
+    if skipped_excluded:
+        print(f"  Excluded (replied=yes):   {skipped_excluded}")
     if errors:
         print(f"  Errors:                   {errors}")
     if drafted:
-        print("\n  → Review the follow-up drafts in Gmail, then send with:")
+        print("\n  → Delete unwanted drafts in Gmail, then send the rest with:")
         print("     python update_drafts.py --send-drafts")
