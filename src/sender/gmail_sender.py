@@ -362,6 +362,55 @@ def create_drafts_from_review(review_file: str) -> None:
     _do_create_drafts(review_file)
 
 
+def create_drafts_from_generated() -> None:
+    """
+    Entry point for --step draft mode.
+
+    Reads ALL generated emails directly from the pipeline state (no review CSV
+    needed) and creates a Gmail draft for each one.  The user then reviews the
+    drafts in Gmail and calls `python update_drafts.py --send-drafts` to send.
+    """
+    state = load_state(PIPELINE_PATH)
+    generated = state.get("generated", [])
+
+    if not generated:
+        print("  [INFO] No generated emails found. Run --step generate first.")
+        return
+
+    print(f"\n  Creating {len(generated)} draft(s) in Gmail…")
+    service = get_gmail_service()
+    signature_html = get_gmail_signature(service)
+
+    success_count = 0
+    fail_count = 0
+
+    for company in generated:
+        email_addr = company.get("stakeholder_email", "").strip()
+        if not email_addr:
+            print(f"  [SKIP] {company.get('company_name')} — no email address")
+            continue
+
+        try:
+            raw = build_mime_email(company, signature_html)
+            resp = service.post(
+                f"{GMAIL_API}/drafts",
+                json={"message": {"raw": raw}},
+            )
+            resp.raise_for_status()
+            draft_id = resp.json().get("id", "?")
+            success_count += 1
+            print(f"  [DRAFT] {company.get('company_name')} → {email_addr}  (id: {draft_id})")
+
+        except Exception as e:
+            fail_count += 1
+            print(f"  [FAIL] {company.get('company_name')}: {e}")
+
+    print(f"\n  Drafts created: {success_count}  |  Failed: {fail_count}")
+    if success_count:
+        print("  → Review the drafts in Gmail, then run:")
+        print("     python update_drafts.py --send-drafts")
+
+
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------

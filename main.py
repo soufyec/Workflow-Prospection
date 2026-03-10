@@ -5,12 +5,16 @@ Usage:
   python main.py --step discover   # Scrape VC portfolios + LinkedIn posts + Apollo
   python main.py --step enrich     # Find stakeholder emails on company websites
   python main.py --step generate   # Render personalized emails from template
-  python main.py --step review     # Generate review CSV + HTML preview
+  python main.py --step draft      # Create Gmail Drafts for ALL generated emails
+  python main.py --step review     # (Legacy) Generate review CSV + HTML preview
   python main.py --step send       # Schedule approved emails for next Monday 09:00
-  python main.py --step all        # Run discover → enrich → generate → review
+  python main.py --step all        # Run discover → enrich → generate → draft
 
   python main.py --status          # Show current pipeline state counts
   python main.py --reset           # Clear pipeline state (start fresh)
+
+  # After reviewing drafts in Gmail, send them all:
+  python update_drafts.py --send-drafts
 
   # Optional flags for --step send:
   python main.py --step send --review-file review/review_20260302_corrected.csv
@@ -52,8 +56,15 @@ def cmd_generate(args):
     print(f"\n  Total emails ready for review: {len(generated)}")
 
 
+def cmd_draft(args):
+    print("\n=== STAGE 4: CREATE DRAFTS ===")
+    from src.sender.gmail_sender import create_drafts_from_generated
+
+    create_drafts_from_generated()
+
+
 def cmd_review(args):
-    print("\n=== STAGE 4: REVIEW ===")
+    print("\n=== STAGE 4 (legacy): REVIEW CSV ===")
     from src.reviewer.review import generate_review_csv
 
     generate_review_csv()
@@ -87,10 +98,10 @@ def cmd_all(args):
     cmd_discover(args)
     cmd_enrich(args)
     cmd_generate(args)
-    cmd_review(args)
-    print("\n  Pipeline complete through review stage.")
-    print("  Edit the review CSV, approve rows, then run:")
-    print("  python main.py --step send")
+    cmd_draft(args)
+    print("\n  Pipeline complete — all emails are now Gmail Drafts.")
+    print("  Review them in Gmail, then send with:")
+    print("  python update_drafts.py --send-drafts")
 
 
 def cmd_status(args):
@@ -137,7 +148,7 @@ def main():
     mode_group = parser.add_mutually_exclusive_group(required=True)
     mode_group.add_argument(
         "--step",
-        choices=["discover", "enrich", "generate", "review", "send", "all"],
+        choices=["discover", "enrich", "generate", "draft", "review", "send", "all"],
         help="Which pipeline stage to run",
     )
     mode_group.add_argument(
@@ -187,6 +198,7 @@ def main():
         "discover": cmd_discover,
         "enrich": cmd_enrich,
         "generate": cmd_generate,
+        "draft": cmd_draft,
         "review": cmd_review,
         "send": cmd_send,
         "all": cmd_all,
