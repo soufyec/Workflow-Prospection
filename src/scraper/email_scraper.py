@@ -22,6 +22,11 @@ from src.utils.pipeline_state import load_state, save_state
 
 EMAIL_REGEX = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")
 
+# Matches international and local phone numbers (8–17 digits with separators)
+PHONE_REGEX = re.compile(
+    r"(?<!\d)(\+?(?:\d[\s\.\-\(\)]?){7,16}\d)(?!\d)"
+)
+
 IGNORED_EMAIL_PATTERNS = re.compile(
     # File extensions appearing before @ (obfuscated filenames)
     r"\.(png|jpg|jpeg|gif|svg|pdf|css|js|woff|woff2|ttf|eot)@"
@@ -131,6 +136,76 @@ def infer_stakeholder_name(html: str, email: str) -> Optional[str]:
     return None
 
 
+def find_phones_in_html(html: str) -> list:
+    """
+    Extract phone numbers from HTML. Returns cleaned strings like +31612345678.
+    Filters out short sequences that look like years, zip codes or IDs.
+    """
+    # Strip HTML tags first so we don't match attribute values inside tags
+    text = re.sub(r"<[^>]+>", " ", html)
+    raw = PHONE_REGEX.findall(text)
+    phones = []
+    for raw_phone in raw:
+        # Remove all separators to count digits
+        digits_only = re.sub(r"[^\d]", "", raw_phone)
+        # Must have 8–15 digits; skip ZIP codes / years (4 digits)
+        if len(digits_only) < 8 or len(digits_only) > 15:
+            continue
+        # Skip pure-digit sequences that look like years or IDs (no +, spaces, dots, dashes)
+        if re.fullmatch(r"\d+", raw_phone.strip()) and len(digits_only) <= 6:
+            continue
+        # Normalise: strip surrounding whitespace
+        clean = raw_phone.strip()
+        if clean and clean not in phones:
+            phones.append(clean)
+    return phones
+
+
+def _lookup_phone_via_apollo(company_website: str, stakeholder_name: Optional[str]) -> Optional[str]:
+    """
+    Use Apollo.io People API to find a direct-dial or mobile phone for the
+    best stakeholder contact at the given company domain.
+
+    Returns a phone string or None.
+    """
+    if not APOLLO_API_KEY:
+        return None
+
+    domain = urlparse(company_website).netloc.replace("www.", "")
+    if not domain:
+        return None
+
+    try:
+        payload: dict = {
+            "q_organization_domains": [domain],
+            "person_titles": [
+                "CEO", "Founder", "Co-Founder",
+                "CMO", "Chief Marketing Officer",
+                "Marketing Director", "Head of Marketing",
+            ],
+            "per_page": 5,
+            "page": 1,
+        }
+        resp = requests.post(
+            "https://api.apollo.io/v1/people/search",
+            json=payload,
+            headers={"Content-Type": "application/json", "X-Api-Key": APOLLO_API_KEY},
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            return None
+        people = resp.json().get("people") or []
+        for person in people:
+            phone = person.get("direct_dial_phone_number") or person.get("mobile_phone_number")
+            if not phone and person.get("phone_numbers"):
+                phone = person["phone_numbers"][0].get("sanitized_number")
+            if phone:
+                return phone
+    except Exception:
+        pass
+    return None
+
+
 FALLBACK_PATTERNS = ["hello@{}", "info@{}", "contact@{}", "team@{}", "hi@{}"]
 
 
@@ -217,18 +292,19 @@ _INVALID_WEBSITE_RE = re.compile(
 
 def find_best_email_for_company(website: str) -> dict:
     """
-    Scan subpages of a company website to find the best stakeholder email.
+    Scan subpages of a company website to find the best stakeholder email and phone.
 
-    Returns dict with: stakeholder_email, stakeholder_name, email_source_url
+    Returns dict with: stakeholder_email, stakeholder_name, email_source_url, stakeholder_phone
     """
     if not website or _INVALID_WEBSITE_RE.search(website):
-        return {"stakeholder_email": None, "stakeholder_name": None, "email_source_url": None}
+        return {"stakeholder_email": None, "stakeholder_name": None, "email_source_url": None, "stakeholder_phone": None}
 
     # Normalize to https:// to avoid proxy issues with http://
     website = _normalize_url(website)
     base = website.rstrip("/")
 
     all_hits: list = []  # (score, email, source_url, html)
+    all_phones: list = []
 
     # --- Homepage probe ---
     # If the homepage is completely unreachable (Cloudflare / proxy block),
@@ -239,7 +315,9 @@ def find_best_email_for_company(website: str) -> dict:
         homepage_html = fetch_page_playwright(base)
 
     if not homepage_html:
-        return _guess_email_pattern(website)
+        fallback = _guess_email_pattern(website)
+        fallback["stakeholder_phone"] = _lookup_phone_via_apollo(website, None)
+        return fallback
 
     # Homepage is reachable — scan it and then check high-value subpages
     for url in [base] + [base + path for path in SUBPAGE_CANDIDATES]:
@@ -258,17 +336,26 @@ def find_best_email_for_company(website: str) -> dict:
             s = score_email(email, surrounding)
             all_hits.append((s, email, url, html))
 
+        phones = find_phones_in_html(html)
+        all_phones.extend(phones)
+
     if not all_hits:
-        return _guess_email_pattern(website)
+        fallback = _guess_email_pattern(website)
+        fallback["stakeholder_phone"] = all_phones[0] if all_phones else _lookup_phone_via_apollo(website, None)
+        return fallback
 
     all_hits.sort(key=lambda x: x[0])
     best_score, best_email, best_url, best_html = all_hits[0]
     name = infer_stakeholder_name(best_html, best_email)
 
+    # Phone: prefer website-scraped; fall back to Apollo People API
+    phone = all_phones[0] if all_phones else _lookup_phone_via_apollo(website, name)
+
     return {
         "stakeholder_email": best_email,
         "stakeholder_name": name,
         "email_source_url": best_url,
+        "stakeholder_phone": phone,
     }
 
 
@@ -306,8 +393,9 @@ def enrich_companies() -> list:
         state["enriched"] = enriched
         save_state(PIPELINE_PATH, state)
 
-        status = result["stakeholder_email"] or "NOT FOUND"
-        print(f"    → {status}")
+        email_status = result["stakeholder_email"] or "NOT FOUND"
+        phone_status = result.get("stakeholder_phone") or "no phone"
+        print(f"    → email: {email_status} | phone: {phone_status}")
 
     found = sum(1 for c in enriched if c.get("stakeholder_email"))
     print(f"\n  Email coverage: {found}/{len(enriched)} companies ({found * 100 // max(len(enriched), 1)}%)")

@@ -105,6 +105,7 @@ def _build_record(name: str, website: str, vc_entry: dict, source: str = "portfo
         "stakeholder_email": None,
         "stakeholder_name": None,
         "email_source_url": None,
+        "stakeholder_phone": None,
         "email_subject": None,
         "email_body": None,
         "review_status": "pending",

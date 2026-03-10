@@ -169,6 +169,7 @@ def discover_from_apollo() -> list:
                 "post_text": "",
                 "stakeholder_email": None,
                 "stakeholder_name": None,
+                "stakeholder_phone": None,
                 "email_source_url": None,
                 "email_subject": None,
                 "email_body": None,
