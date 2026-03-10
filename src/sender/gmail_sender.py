@@ -52,6 +52,7 @@ from src.utils.pipeline_state import load_state, save_state
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/gmail.compose",
+    "https://www.googleapis.com/auth/gmail.readonly",
 ]
 
 # Timezone used for the Monday 09:00 schedule
@@ -369,7 +370,13 @@ def create_drafts_from_generated() -> None:
     Reads ALL generated emails directly from the pipeline state (no review CSV
     needed) and creates a Gmail draft for each one.  The user then reviews the
     drafts in Gmail and calls `python update_drafts.py --send-drafts` to send.
+
+    Also writes to followup_log.csv so the follow-up system knows which
+    emails were sent and when (using draft-creation timestamp as proxy).
     """
+    import csv as _csv
+    from config.settings import FOLLOWUP_LOG_PATH
+
     state = load_state(PIPELINE_PATH)
     generated = state.get("generated", [])
 
@@ -377,12 +384,21 @@ def create_drafts_from_generated() -> None:
         print("  [INFO] No generated emails found. Run --step generate first.")
         return
 
+    # Load already-logged emails to avoid duplicate entries
+    already_logged: set = set()
+    if os.path.exists(FOLLOWUP_LOG_PATH):
+        with open(FOLLOWUP_LOG_PATH, "r", encoding="utf-8") as _f:
+            for row in _csv.DictReader(_f):
+                already_logged.add(row.get("stakeholder_email", "").strip().lower())
+
     print(f"\n  Creating {len(generated)} draft(s) in Gmail…")
     service = get_gmail_service()
     signature_html = get_gmail_signature(service)
 
     success_count = 0
     fail_count = 0
+    followup_records = []
+    now_ts = datetime.now().isoformat()
 
     for company in generated:
         email_addr = company.get("stakeholder_email", "").strip()
@@ -401,11 +417,42 @@ def create_drafts_from_generated() -> None:
             success_count += 1
             print(f"  [DRAFT] {company.get('company_name')} → {email_addr}  (id: {draft_id})")
 
+            if email_addr.lower() not in already_logged:
+                followup_records.append({
+                    "company_name": company.get("company_name", ""),
+                    "website": company.get("website", ""),
+                    "stakeholder_name": company.get("stakeholder_name", ""),
+                    "stakeholder_email": email_addr,
+                    "industry": company.get("industry", ""),
+                    "initial_sent_at": now_ts,
+                    "replied": "no",
+                    "fu1_sent_at": "",
+                    "fu2_sent_at": "",
+                    "fu3_sent_at": "",
+                })
+
         except Exception as e:
             fail_count += 1
             print(f"  [FAIL] {company.get('company_name')}: {e}")
 
     print(f"\n  Drafts created: {success_count}  |  Failed: {fail_count}")
+
+    # Persist followup log entries
+    if followup_records:
+        _fu_fieldnames = [
+            "company_name", "website", "stakeholder_name", "stakeholder_email",
+            "industry", "initial_sent_at", "replied",
+            "fu1_sent_at", "fu2_sent_at", "fu3_sent_at",
+        ]
+        os.makedirs(os.path.dirname(FOLLOWUP_LOG_PATH), exist_ok=True)
+        file_exists = os.path.exists(FOLLOWUP_LOG_PATH)
+        with open(FOLLOWUP_LOG_PATH, "a", newline="", encoding="utf-8") as _f:
+            writer = _csv.DictWriter(_f, fieldnames=_fu_fieldnames, extrasaction="ignore")
+            if not file_exists:
+                writer.writeheader()
+            writer.writerows(followup_records)
+        print(f"  Logged {len(followup_records)} new entr(ies) to {FOLLOWUP_LOG_PATH}")
+
     if success_count:
         print("  → Review the drafts in Gmail, then run:")
         print("     python update_drafts.py --send-drafts")

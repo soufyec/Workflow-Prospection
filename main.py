@@ -6,6 +6,7 @@ Usage:
   python main.py --step enrich     # Find stakeholder emails on company websites
   python main.py --step generate   # Render personalized emails from template
   python main.py --step draft      # Create Gmail Drafts for ALL generated emails
+  python main.py --step followup   # Check replies & create follow-up drafts (FU1/FU2/FU3)
   python main.py --step review     # (Legacy) Generate review CSV + HTML preview
   python main.py --step send       # Schedule approved emails for next Monday 09:00
   python main.py --step all        # Run discover → enrich → generate → draft
@@ -15,6 +16,11 @@ Usage:
 
   # After reviewing drafts in Gmail, send them all:
   python update_drafts.py --send-drafts
+
+  # Follow-up timing (days after previous email, configurable via .env):
+  FOLLOWUP_1_DAYS=5    # First follow-up
+  FOLLOWUP_2_DAYS=12   # Second follow-up
+  FOLLOWUP_3_DAYS=21   # Final goodbye
 
   # Optional flags for --step send:
   python main.py --step send --review-file review/review_20260302_corrected.csv
@@ -94,6 +100,13 @@ def cmd_send(args):
     send_approved_emails(review_file, send_now=send_now, schedule_at=schedule_at)
 
 
+def cmd_followup(args):
+    print("\n=== STAGE 5: FOLLOW-UPS ===")
+    from src.sender.followup_sender import run_followups
+
+    run_followups()
+
+
 def cmd_all(args):
     cmd_discover(args)
     cmd_enrich(args)
@@ -148,7 +161,7 @@ def main():
     mode_group = parser.add_mutually_exclusive_group(required=True)
     mode_group.add_argument(
         "--step",
-        choices=["discover", "enrich", "generate", "draft", "review", "send", "all"],
+        choices=["discover", "enrich", "generate", "draft", "followup", "review", "send", "all"],
         help="Which pipeline stage to run",
     )
     mode_group.add_argument(
@@ -199,6 +212,7 @@ def main():
         "enrich": cmd_enrich,
         "generate": cmd_generate,
         "draft": cmd_draft,
+        "followup": cmd_followup,
         "review": cmd_review,
         "send": cmd_send,
         "all": cmd_all,

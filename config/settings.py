@@ -18,9 +18,18 @@ TOKEN_PATH = os.environ.get("TOKEN_PATH", "credentials/token.json")
 LINKEDIN_SESSION_PATH = os.environ.get("LINKEDIN_SESSION_PATH", "credentials/linkedin_session.json")
 PIPELINE_PATH = os.environ.get("PIPELINE_PATH", "data/pipeline.json")
 SENT_LOG_PATH = os.environ.get("SENT_LOG_PATH", "data/sent_log.csv")
+FOLLOWUP_LOG_PATH = os.environ.get("FOLLOWUP_LOG_PATH", "data/followup_log.csv")
 REVIEW_DIR = os.environ.get("REVIEW_DIR", "review/")
 TEMPLATE_PATH = os.environ.get("TEMPLATE_PATH", "templates/prospection_email.html")
+FOLLOWUP_1_TEMPLATE_PATH = os.environ.get("FOLLOWUP_1_TEMPLATE_PATH", "templates/followup_1.html")
+FOLLOWUP_2_TEMPLATE_PATH = os.environ.get("FOLLOWUP_2_TEMPLATE_PATH", "templates/followup_2.html")
+FOLLOWUP_3_TEMPLATE_PATH = os.environ.get("FOLLOWUP_3_TEMPLATE_PATH", "templates/followup_3.html")
 VC_LIST_PATH = os.environ.get("VC_LIST_PATH", "config/vc_list.json")
+
+# Days after initial email to send each follow-up
+FOLLOWUP_1_DAYS = int(os.environ.get("FOLLOWUP_1_DAYS", "5"))
+FOLLOWUP_2_DAYS = int(os.environ.get("FOLLOWUP_2_DAYS", "12"))
+FOLLOWUP_3_DAYS = int(os.environ.get("FOLLOWUP_3_DAYS", "21"))
 
 REQUEST_DELAY_MIN = float(os.environ.get("REQUEST_DELAY_MIN", "1.5"))
 REQUEST_DELAY_MAX = float(os.environ.get("REQUEST_DELAY_MAX", "4.0"))
