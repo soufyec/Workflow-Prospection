@@ -138,23 +138,34 @@ def infer_stakeholder_name(html: str, email: str) -> Optional[str]:
 
 def find_phones_in_html(html: str) -> list:
     """
-    Extract phone numbers from HTML. Returns cleaned strings like +31612345678.
-    Filters out short sequences that look like years, zip codes or IDs.
+    Extract phone numbers from HTML. Returns cleaned strings like +31 6 12345678.
+    Filters out dates, postal codes, timestamps, and other false positives.
     """
-    # Strip HTML tags first so we don't match attribute values inside tags
+    # First, extract tel: links which are the most reliable source
+    tel_phones = []
+    for match in re.findall(r'href=["\']tel:([^"\']+)["\']', html, re.IGNORECASE):
+        digits = re.sub(r"[^\d+]", "", match)
+        if len(re.sub(r"[^\d]", "", digits)) >= 8:
+            tel_phones.append(digits)
+
+    # Then scan visible text
     text = re.sub(r"<[^>]+>", " ", html)
     raw = PHONE_REGEX.findall(text)
-    phones = []
+    phones = list(tel_phones)
     for raw_phone in raw:
-        # Remove all separators to count digits
         digits_only = re.sub(r"[^\d]", "", raw_phone)
-        # Must have 8–15 digits; skip ZIP codes / years (4 digits)
-        if len(digits_only) < 8 or len(digits_only) > 15:
+        # Must have 9–15 digits (9 min to avoid KVK/postal codes)
+        if len(digits_only) < 9 or len(digits_only) > 15:
             continue
-        # Skip pure-digit sequences that look like years or IDs (no +, spaces, dots, dashes)
-        if re.fullmatch(r"\d+", raw_phone.strip()) and len(digits_only) <= 6:
+        # Skip date patterns: YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY
+        if re.search(r"\b(19|20)\d{2}[\-/\.](0[1-9]|1[0-2])[\-/\.](0[1-9]|[12]\d|3[01])\b", raw_phone):
             continue
-        # Normalise: strip surrounding whitespace
+        if re.search(r"\b(0[1-9]|[12]\d|3[01])[\-/\.](0[1-9]|1[0-2])[\-/\.](19|20)\d{2}\b", raw_phone):
+            continue
+        # Skip pure digit sequences without any + or separator (likely IDs/timestamps)
+        if re.fullmatch(r"\d+", raw_phone.strip()):
+            continue
+        # Prefer numbers starting with + (international) or common country patterns
         clean = raw_phone.strip()
         if clean and clean not in phones:
             phones.append(clean)
