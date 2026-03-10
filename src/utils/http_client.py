@@ -1,3 +1,4 @@
+import os
 import random
 import time
 from typing import Optional
@@ -65,18 +66,43 @@ def fetch_page(
     return None
 
 
+def _get_playwright_proxy() -> Optional[dict]:
+    """Return Playwright proxy config from system environment variables, or None."""
+    proxy_url = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy") or \
+                os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy")
+    if not proxy_url:
+        return None
+    # Playwright expects {"server": url, "username": ..., "password": ...}
+    # The proxy URL may embed credentials as user:pass@host:port
+    from urllib.parse import urlparse
+    parsed = urlparse(proxy_url)
+    proxy: dict = {"server": f"{parsed.scheme}://{parsed.hostname}:{parsed.port}"}
+    if parsed.username:
+        proxy["username"] = parsed.username
+    if parsed.password:
+        proxy["password"] = parsed.password
+    return proxy
+
+
 def fetch_page_playwright(url: str) -> Optional[str]:
     """
     Fallback fetch using Playwright headless Chromium for JS-rendered sites.
+    Inherits the system HTTPS_PROXY so that egress goes through the same
+    proxy as requests-based fetches.
     Returns HTML string or None on failure.
     """
     try:
         from playwright.sync_api import sync_playwright
 
+        proxy = _get_playwright_proxy()
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(
+                headless=True,
+                proxy=proxy,
+                args=["--ignore-certificate-errors"],
+            )
             page = browser.new_page(user_agent=random.choice(USER_AGENTS))
-            page.goto(url, wait_until="domcontentloaded", timeout=8000)
+            page.goto(url, wait_until="domcontentloaded", timeout=20000)
             page.wait_for_timeout(random.randint(1500, 3000))
             content = page.content()
             browser.close()
