@@ -64,6 +64,40 @@ def load_and_fix_approved(review_file: str) -> list:
     return approved
 
 
+def send_existing_drafts(service) -> tuple[int, int]:
+    """Send all existing drafts in the Gmail account. Returns (success, fail)."""
+    success, fail = 0, 0
+    page_token = None
+    draft_ids = []
+
+    while True:
+        params = {"maxResults": 100}
+        if page_token:
+            params["pageToken"] = page_token
+        resp = service.get(f"{GMAIL_API}/drafts", params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        draft_ids.extend(d["id"] for d in data.get("drafts", []))
+        page_token = data.get("nextPageToken")
+        if not page_token:
+            break
+
+    for draft_id in draft_ids:
+        try:
+            resp = service.post(
+                f"{GMAIL_API}/drafts/send",
+                json={"id": draft_id},
+            )
+            resp.raise_for_status()
+            success += 1
+            print(f"  [SENT] draft {draft_id}")
+        except Exception as e:
+            fail += 1
+            print(f"  [FAIL] draft {draft_id}: {e}")
+
+    return success, fail
+
+
 def delete_all_drafts(service) -> int:
     """Delete every draft in the authenticated Gmail account. Returns count deleted."""
     deleted = 0
@@ -159,9 +193,33 @@ def main():
         default=False,
         help="Send emails immediately instead of creating drafts.",
     )
+    parser.add_argument(
+        "--send-drafts",
+        action="store_true",
+        default=False,
+        help="Send all existing Gmail drafts immediately.",
+    )
     args = parser.parse_args()
 
     print(f"\n  Review file: {args.review_file}")
+
+    if args.send_drafts:
+        confirm = input(
+            "\n  This will SEND all existing drafts in your Gmail account immediately.\n"
+            "  Type 'yes' to continue: "
+        ).strip().lower()
+        if confirm != "yes":
+            print("  Aborted.")
+            sys.exit(0)
+
+        print("\n=== Step 1: Authenticate ===")
+        service = get_gmail_service()
+
+        print("\n=== Step 2: Send all existing drafts ===")
+        success, fail = send_existing_drafts(service)
+
+        print(f"\n  Done — Sent: {success}  |  Failed: {fail}")
+        return
 
     approved = load_and_fix_approved(args.review_file)
     if not approved:
