@@ -9,7 +9,8 @@ Usage:
   python main.py --step followup   # Check replies & create follow-up drafts (FU1/FU2/FU3)
   python main.py --step review     # (Legacy) Generate review CSV + HTML preview
   python main.py --step send       # Schedule approved emails for next Monday 09:00
-  python main.py --step all        # Run discover → enrich → generate → draft
+  python main.py                   # Run full pipeline: discover → enrich → generate → draft
+  python main.py --step all        # Same as above
 
   python main.py --status          # Show current pipeline state counts
   python main.py --reset           # Clear pipeline state (start fresh)
@@ -158,11 +159,14 @@ def main():
         epilog=__doc__,
     )
 
-    mode_group = parser.add_mutually_exclusive_group(required=True)
+    mode_group = parser.add_mutually_exclusive_group(required=False)
     mode_group.add_argument(
         "--step",
         choices=["discover", "enrich", "generate", "draft", "followup", "review", "send", "all"],
-        help="Which pipeline stage to run",
+        nargs="?",
+        const="all",
+        default=None,
+        help="Which pipeline stage to run (default: all)",
     )
     mode_group.add_argument(
         "--status",
@@ -223,7 +227,8 @@ def main():
     elif args.reset:
         cmd_reset(args)
     else:
-        dispatch[args.step](args)
+        step = args.step or "all"
+        dispatch[step](args)
 
 
 if __name__ == "__main__":
