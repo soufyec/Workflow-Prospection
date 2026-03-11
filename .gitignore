@@ -16,3 +16,5 @@ venv/
 env/
 .DS_Store
 *.log
+.oauth_flow_state.pkl
+.oauth_state.json
