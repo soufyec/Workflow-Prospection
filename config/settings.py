@@ -6,8 +6,28 @@ load_dotenv()
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "hello@dolmenstudios.com")
 SENDER_NAME = os.environ.get("SENDER_NAME", "Dõlmen Studios")
 
-# Apollo.io API key — get yours at https://developer.apollo.io/
+# ── Email discovery APIs ──────────────────────────────────────────────────────
+# Apollo.io — https://developer.apollo.io/
 APOLLO_API_KEY = os.environ.get("APOLLO_API_KEY", "")
+
+# FindyMail — https://app.findymail.com/  (find + verify)
+FINDYMAIL_API_KEY = os.environ.get("FINDYMAIL_API_KEY", "")
+
+# Prospeo — https://prospeo.io/  (domain search + email finder)
+PROSPEO_API_KEY = os.environ.get("PROSPEO_API_KEY", "")
+
+# IcyPeas — https://icypeas.com/  (email search by name + domain)
+ICYPEAS_API_KEY = os.environ.get("ICYPEAS_API_KEY", "")
+
+# LeadMagic — https://leadmagic.io/  (email finder by name + domain)
+LEADMAGIC_API_KEY = os.environ.get("LEADMAGIC_API_KEY", "")
+
+# Wiza — https://wiza.co/  (LinkedIn URL → email)
+WIZA_API_KEY = os.environ.get("WIZA_API_KEY", "")
+
+# ContactOut — https://contactout.com/  (LinkedIn URL → email)
+CONTACTOUT_API_KEY = os.environ.get("CONTACTOUT_API_KEY", "")
+
 GMAIL_SIGNATURE = os.environ.get("GMAIL_SIGNATURE", "")
 
 LINKEDIN_EMAIL = os.environ.get("LINKEDIN_EMAIL", "")
@@ -34,3 +54,4 @@ FOLLOWUP_3_DAYS = int(os.environ.get("FOLLOWUP_3_DAYS", "21"))
 REQUEST_DELAY_MIN = float(os.environ.get("REQUEST_DELAY_MIN", "1.5"))
 REQUEST_DELAY_MAX = float(os.environ.get("REQUEST_DELAY_MAX", "4.0"))
 MAX_RETRIES = int(os.environ.get("MAX_RETRIES", "3"))
+

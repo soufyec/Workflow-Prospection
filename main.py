@@ -2,15 +2,16 @@
 Dõlmen Studios — Prospection Email Automation
 
 Usage:
-  python main.py --step discover   # Scrape VC portfolios + LinkedIn posts + Apollo
-  python main.py --step enrich     # Find stakeholder emails on company websites
-  python main.py --step generate   # Render personalized emails from template
-  python main.py --step draft      # Create Gmail Drafts for ALL generated emails
-  python main.py --step followup   # Check replies & create follow-up drafts (FU1/FU2/FU3)
-  python main.py --step review     # (Legacy) Generate review CSV + HTML preview
-  python main.py --step send       # Schedule approved emails for next Monday 09:00
-  python main.py                   # Run full pipeline: discover → enrich → generate → draft
-  python main.py --step all        # Same as above
+  python main.py --step discover    # Scrape VC portfolios + LinkedIn posts + Apollo
+  python main.py --step enrich      # Find stakeholder emails (scraping + multi-provider APIs)
+  python main.py --step re-enrich   # Re-run APIs on companies with missing/weak emails
+  python main.py --step generate    # Render personalized emails from template
+  python main.py --step draft       # Create Gmail Drafts for ALL generated emails
+  python main.py --step followup    # Check replies & create follow-up drafts (FU1/FU2/FU3)
+  python main.py --step review      # (Legacy) Generate review CSV + HTML preview
+  python main.py --step send        # Schedule approved emails for next Monday 09:00
+  python main.py                    # Run full pipeline: discover → enrich → generate → draft
+  python main.py --step all         # Same as above
 
   python main.py --status          # Show current pipeline state counts
   python main.py --reset           # Clear pipeline state (start fresh)
@@ -53,6 +54,73 @@ def cmd_enrich(args):
 
     enriched = enrich_companies()
     print(f"\n  Total enriched: {len(enriched)}")
+
+
+def cmd_reenrich(args):
+    """
+    Re-run multi-provider API waterfall on companies that already went through
+    Stage 2 but still have no email, a pattern-based email, or a generic one.
+    Also verifies emails in the already-generated list.
+    """
+    print("\n=== RE-ENRICH: Multi-provider API pass ===")
+    from src.scraper.email_scraper import score_email
+    from src.enricher.multi_provider import enrich_email, verify_existing_email
+    from src.utils.pipeline_state import load_state, save_state
+
+    state = load_state(PIPELINE_PATH)
+    enriched = state.get("enriched", [])
+
+    # Targets: no email, pattern-based, or generic (score ≥ 8)
+    targets = [
+        c for c in enriched
+        if (
+            not c.get("stakeholder_email")
+            or c.get("email_source_url") == "pattern-based"
+            or score_email(c.get("stakeholder_email") or "", "") >= 8
+        )
+    ]
+
+    print(f"  Companies to re-enrich: {len(targets)} / {len(enriched)}")
+    if not targets:
+        print("  Nothing to do.")
+        return
+
+    upgraded = 0
+    for company in targets:
+        name = company.get("company_name", "?")
+        old_email = company.get("stakeholder_email") or "—"
+        print(f"  [RE-ENRICH] {name}  (current: {old_email})")
+        api_result = enrich_email(company)
+        if api_result.get("stakeholder_email"):
+            company.update(api_result)
+            company["email_source_url"] = f"api:{api_result['email_provider']}"
+            print(f"    → {api_result['stakeholder_email']}"
+                  f" ({api_result['email_provider']},"
+                  f" confidence: {api_result.get('email_confidence', '?')},"
+                  f" verified: {api_result.get('email_verified', '?')})")
+            upgraded += 1
+        else:
+            print("    → no result from any provider")
+
+    # Also verify existing scraped emails that haven't been verified yet
+    unverified = [
+        c for c in enriched
+        if c.get("stakeholder_email")
+        and c.get("email_verified") is None
+        and c not in targets
+    ]
+    print(f"\n  Verifying {len(unverified)} previously scraped email(s)...")
+    invalidated = 0
+    for company in unverified:
+        verification = verify_existing_email(company)
+        company.update(verification)
+        if not verification.get("email_verified", True):
+            invalidated += 1
+            print(f"    [INVALID] {company.get('stakeholder_email')} ({company.get('company_name')})")
+
+    state["enriched"] = enriched
+    save_state(PIPELINE_PATH, state)
+    print(f"\n  Done — upgraded: {upgraded} | invalidated: {invalidated}")
 
 
 def cmd_generate(args):
@@ -162,7 +230,7 @@ def main():
     mode_group = parser.add_mutually_exclusive_group(required=False)
     mode_group.add_argument(
         "--step",
-        choices=["discover", "enrich", "generate", "draft", "followup", "review", "send", "all"],
+        choices=["discover", "enrich", "re-enrich", "generate", "draft", "followup", "review", "send", "all"],
         nargs="?",
         const="all",
         default=None,
@@ -214,6 +282,7 @@ def main():
     dispatch = {
         "discover": cmd_discover,
         "enrich": cmd_enrich,
+        "re-enrich": cmd_reenrich,
         "generate": cmd_generate,
         "draft": cmd_draft,
         "followup": cmd_followup,

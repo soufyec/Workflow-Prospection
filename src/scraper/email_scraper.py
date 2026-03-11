@@ -19,6 +19,7 @@ from bs4 import BeautifulSoup
 from config.settings import APOLLO_API_KEY, PIPELINE_PATH
 from src.utils.http_client import fetch_page, fetch_page_playwright, needs_js_rendering
 from src.utils.pipeline_state import load_state, save_state
+from src.enricher.multi_provider import enrich_email, verify_existing_email
 
 EMAIL_REGEX = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")
 
@@ -400,13 +401,49 @@ def enrich_companies() -> list:
         print(f"  [ENRICH] {company['company_name']} → {company['website']}")
         result = find_best_email_for_company(company["website"])
         company.update(result)
+
+        scraped_email = result.get("stakeholder_email")
+        scraped_score = score_email(scraped_email or "", "") if scraped_email else 999
+
+        # Use multi-provider APIs when:
+        #  • no email found via scraping, OR
+        #  • only a generic email found (score ≥ 8: hello@, info@, etc.)
+        if not scraped_email or scraped_score >= 8:
+            api_result = enrich_email(company)
+            api_email = api_result.get("stakeholder_email")
+            api_score = score_email(api_email or "", api_result.get("stakeholder_title") or "") if api_email else 999
+            if api_email and api_score <= scraped_score:
+                company.update(api_result)
+                company["email_source_url"] = f"api:{api_result['email_provider']}"
+                print(f"    → API ({api_result['email_provider']}): {api_email}"
+                      f" | confidence: {api_result.get('email_confidence', '?')}"
+                      f" | verified: {api_result.get('email_verified', '?')}")
+        elif scraped_email:
+            # Email found via scraping — verify it
+            verification = verify_existing_email(company)
+            company.update(verification)
+            if not verification.get("email_verified", True):
+                print(f"    → INVALID (FindyMail): {scraped_email} — trying APIs")
+                company["stakeholder_email"] = None
+                api_result = enrich_email(company)
+                if api_result.get("stakeholder_email"):
+                    company.update(api_result)
+                    company["email_source_url"] = f"api:{api_result['email_provider']}"
+
         enriched.append(company)
         state["enriched"] = enriched
         save_state(PIPELINE_PATH, state)
 
-        email_status = result["stakeholder_email"] or "NOT FOUND"
-        phone_status = result.get("stakeholder_phone") or "no phone"
-        print(f"    → email: {email_status} | phone: {phone_status}")
+        email_status = company.get("stakeholder_email") or "NOT FOUND"
+        phone_status = company.get("stakeholder_phone") or "no phone"
+        verified = company.get("email_verified")
+        confidence = company.get("email_confidence")
+        extra = ""
+        if verified is not None:
+            extra = f" | verified: {verified}"
+        if confidence is not None:
+            extra += f" | confidence: {confidence}"
+        print(f"    → email: {email_status} | phone: {phone_status}{extra}")
 
     found = sum(1 for c in enriched if c.get("stakeholder_email"))
     print(f"\n  Email coverage: {found}/{len(enriched)} companies ({found * 100 // max(len(enriched), 1)}%)")
