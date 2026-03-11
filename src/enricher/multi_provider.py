@@ -47,6 +47,7 @@ from config.settings import (
     CONTACTOUT_API_KEY,
     FINDYMAIL_API_KEY,
     ICYPEAS_API_KEY,
+    ICYPEAS_AUTH,
     LEADMAGIC_API_KEY,
     PROSPEO_API_KEY,
     WIZA_API_KEY,
@@ -258,12 +259,13 @@ def verify_email(email: str) -> tuple[bool, float]:
 
 def _icypeas_search(first: str, last: str, domain: str) -> list[dict]:
     """POST /api/email-search → email by name + domain."""
-    if not ICYPEAS_API_KEY or not first or not last:
+    auth = ICYPEAS_AUTH or ICYPEAS_API_KEY  # fallback for legacy single-key setup
+    if not auth or not first or not last:
         return []
     data = _post(
         "https://api.icypeas.com/api/email-search",
         headers={
-            "Authorization": ICYPEAS_API_KEY,
+            "Authorization": auth,
             "Content-Type": "application/json",
         },
         body={"firstname": first, "lastname": last, "domainOrCompany": domain},

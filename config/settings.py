@@ -17,7 +17,11 @@ FINDYMAIL_API_KEY = os.environ.get("FINDYMAIL_API_KEY", "")
 PROSPEO_API_KEY = os.environ.get("PROSPEO_API_KEY", "")
 
 # IcyPeas — https://icypeas.com/  (email search by name + domain)
+# Auth header: "<ICYPEAS_USER_ID>:<ICYPEAS_API_KEY>"
 ICYPEAS_API_KEY = os.environ.get("ICYPEAS_API_KEY", "")
+ICYPEAS_API_SECRET = os.environ.get("ICYPEAS_API_SECRET", "")
+ICYPEAS_USER_ID = os.environ.get("ICYPEAS_USER_ID", "")
+ICYPEAS_AUTH = f"{ICYPEAS_USER_ID}:{ICYPEAS_API_KEY}" if ICYPEAS_USER_ID and ICYPEAS_API_KEY else ""
 
 # LeadMagic — https://leadmagic.io/  (email finder by name + domain)
 LEADMAGIC_API_KEY = os.environ.get("LEADMAGIC_API_KEY", "")
