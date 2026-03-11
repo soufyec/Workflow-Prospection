@@ -18,3 +18,4 @@ env/
 *.log
 .oauth_flow_state.pkl
 .oauth_state.json
+!data/emails_to_draft.json
