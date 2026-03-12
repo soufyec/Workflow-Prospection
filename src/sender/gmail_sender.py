@@ -43,6 +43,7 @@ from config.settings import (
     SENT_LOG_PATH,
     TOKEN_PATH,
 )
+from src.crm.notion_client import update_lead_status
 from src.utils.deduplication import append_sent_log
 from src.utils.pipeline_state import load_state, save_state
 
@@ -284,6 +285,7 @@ def _do_send(review_file: str) -> None:
             state.setdefault("sent", []).append(company)
             success_count += 1
             print(f"  [SENT] {company.get('company_name')} → {email_addr}")
+            update_lead_status(company.get("company_name", ""), "📤 Contacted")
 
         except Exception as e:
             fail_count += 1

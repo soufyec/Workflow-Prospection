@@ -28,6 +28,7 @@ from config.settings import NOTION_API_KEY, NOTION_DATABASE_ID, SENDER_NAME
 
 NOTION_PAGES_URL = "https://api.notion.com/v1/pages"
 NOTION_VERSION = "2022-06-28"
+NOTION_QUERY_URL = "https://api.notion.com/v1/databases/{db_id}/query"
 
 
 def _headers() -> dict:
@@ -145,6 +146,55 @@ def push_lead_to_notion(company: dict) -> bool:
         return False
     except requests.RequestException as e:
         print(f"  [NOTION] ✗ Request error: {e}")
+        return False
+
+
+def find_lead_page_id(company_name: str) -> str | None:
+    """
+    Search the Notion database for a page matching company_name (Title field).
+    Returns the page_id string, or None if not found.
+    """
+    if not NOTION_API_KEY or not NOTION_DATABASE_ID:
+        return None
+
+    url = NOTION_QUERY_URL.format(db_id=NOTION_DATABASE_ID)
+    payload = {
+        "filter": {
+            "property": "Company",
+            "title": {"equals": company_name},
+        },
+        "page_size": 1,
+    }
+    try:
+        resp = requests.post(url, json=payload, headers=_headers(), timeout=15)
+        resp.raise_for_status()
+        results = resp.json().get("results", [])
+        if results:
+            return results[0]["id"]
+    except requests.RequestException as e:
+        print(f"  [NOTION] ✗ find failed for '{company_name}': {e}")
+    return None
+
+
+def update_lead_status(company_name: str, status: str = "📤 Contacted") -> bool:
+    """
+    Update the Status of an existing Notion page to `status`.
+    Returns True on success.
+    """
+    page_id = find_lead_page_id(company_name)
+    if not page_id:
+        print(f"  [NOTION] ✗ '{company_name}' not found in CRM — skipping status update")
+        return False
+
+    url = f"{NOTION_PAGES_URL}/{page_id}"
+    payload = {"properties": {"Status": _select(status)}}
+    try:
+        resp = requests.patch(url, json=payload, headers=_headers(), timeout=15)
+        resp.raise_for_status()
+        print(f"  [NOTION] ✓ '{company_name}' → {status}")
+        return True
+    except requests.RequestException as e:
+        print(f"  [NOTION] ✗ update failed for '{company_name}': {e}")
         return False
 
 
