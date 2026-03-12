@@ -2,6 +2,11 @@
 Dõlmen Studios — Prospection Email Automation
 
 Usage:
+  # ── Dõlmen mode (geo+sector, brand audit, Notion CRM) ──────────────────────
+  python main.py --step dolmen                   # Full Dõlmen pipeline for today's city
+  python main.py --step dolmen --city stockholm  # Force a specific city
+
+  # ── VC-portfolio mode (original) ───────────────────────────────────────────
   python main.py --step discover    # Scrape VC portfolios + LinkedIn posts + Apollo
   python main.py --step enrich      # Find stakeholder emails (scraping + multi-provider APIs)
   python main.py --step re-enrich   # Re-run APIs on companies with missing/weak emails
@@ -176,6 +181,13 @@ def cmd_followup(args):
     run_followups()
 
 
+def cmd_dolmen(args):
+    """Full Dõlmen pipeline: geo discovery → brand audit → enrich → generate → Notion → drafts."""
+    from src.dolmen_pipeline import run_dolmen_pipeline
+    force_city = getattr(args, "city", None)
+    run_dolmen_pipeline(force_city=force_city)
+
+
 def cmd_all(args):
     cmd_discover(args)
     cmd_enrich(args)
@@ -230,7 +242,7 @@ def main():
     mode_group = parser.add_mutually_exclusive_group(required=False)
     mode_group.add_argument(
         "--step",
-        choices=["discover", "enrich", "re-enrich", "generate", "draft", "followup", "review", "send", "all"],
+        choices=["dolmen", "discover", "enrich", "re-enrich", "generate", "draft", "followup", "review", "send", "all"],
         nargs="?",
         const="all",
         default=None,
@@ -247,6 +259,15 @@ def main():
         help="Reset pipeline state (does not delete sent_log.csv)",
     )
 
+    parser.add_argument(
+        "--city",
+        metavar="CITY",
+        default=None,
+        help=(
+            "Override today's geographic market for --step dolmen. "
+            "Options: london, berlin, amsterdam, stockholm, copenhagen, madrid, barcelona."
+        ),
+    )
     parser.add_argument(
         "--review-file",
         metavar="PATH",
@@ -280,6 +301,7 @@ def main():
     args = parser.parse_args()
 
     dispatch = {
+        "dolmen": cmd_dolmen,
         "discover": cmd_discover,
         "enrich": cmd_enrich,
         "re-enrich": cmd_reenrich,

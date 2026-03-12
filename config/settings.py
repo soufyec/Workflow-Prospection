@@ -34,6 +34,14 @@ CONTACTOUT_API_KEY = os.environ.get("CONTACTOUT_API_KEY", "")
 
 GMAIL_SIGNATURE = os.environ.get("GMAIL_SIGNATURE", "")
 
+# ── Notion CRM ────────────────────────────────────────────────────────────────
+# Integration guide: https://developers.notion.com/docs/create-a-notion-integration
+# Database: https://www.notion.so/a6b9c06069c244b797572b71fc666bed
+NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
+NOTION_DATABASE_ID = os.environ.get(
+    "NOTION_DATABASE_ID", "a6b9c06069c244b797572b71fc666bed"
+)
+
 LINKEDIN_EMAIL = os.environ.get("LINKEDIN_EMAIL", "")
 LINKEDIN_PASSWORD = os.environ.get("LINKEDIN_PASSWORD", "")
 

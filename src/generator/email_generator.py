@@ -25,8 +25,10 @@ from src.utils.pipeline_state import load_state, save_state
 INDUSTRY_LABELS = {
     "fintech": "fintech",
     "saas": "SaaS",
+    "software": "SaaS",
     "healthtech": "healthcare technology",
     "ecommerce": "e-commerce",
+    "e-commerce": "e-commerce",
     "cleantech": "clean energy",
     "greentech": "clean energy",
     "edtech": "edtech",
@@ -46,6 +48,15 @@ INDUSTRY_LABELS = {
     "realestate": "real estate",
     "healthcare": "healthcare",
     "consulting": "B2B consulting",
+    "architecture": "architecture",
+    "hospitality": "hospitality",
+    "hotel": "hospitality",
+    "restaurant": "hospitality",
+    "industrial": "industrial",
+    "manufacturing": "industrial manufacturing",
+    "design": "design & creative",
+    "agency": "creative agency",
+    "branding": "branding",
 }
 
 # Opening sentence for the company-specific observation paragraph
@@ -73,6 +84,15 @@ PRODUCT_SERVICE_LINES = {
     "constructiontech": "Your construction tech solution is solid",
     "spacetech": "Your technology is solid",
     "consulting": "Your consultancy offer is solid",
+    "architecture": "Your architectural practice is solid",
+    "hospitality": "Your hospitality offer is solid",
+    "hotel": "Your hospitality offer is solid",
+    "restaurant": "Your hospitality concept is solid",
+    "industrial": "Your product and operations are solid",
+    "manufacturing": "Your manufacturing capability is solid",
+    "design": "Your creative work is solid",
+    "agency": "Your agency offer is solid",
+    "branding": "Your creative work is solid",
     "default": "Your product is solid",
 }
 
@@ -172,6 +192,42 @@ PAIN_POINTS = {
         "potential clients make a quality judgement about your expertise "
         "before the first call — and your current brand may not be winning that moment"
     ),
+    "architecture": (
+        "in architecture, your portfolio is your pitch — and a brand that doesn't "
+        "signal precision and vision loses high-value commissions before the first meeting"
+    ),
+    "hospitality": (
+        "in hospitality, emotion drives the booking decision — "
+        "a brand that doesn't evoke desire and trust at first glance leaves revenue on the table"
+    ),
+    "hotel": (
+        "in hospitality, emotion drives the booking decision — "
+        "a brand that doesn't evoke desire and trust at first glance leaves revenue on the table"
+    ),
+    "restaurant": (
+        "in hospitality, the brand experience starts before guests walk through the door — "
+        "and there's an opportunity to make your visual identity match the quality inside"
+    ),
+    "industrial": (
+        "industrial brands that look premium command better pricing and attract better clients — "
+        "and your current brand may not yet reflect the quality of your operations"
+    ),
+    "manufacturing": (
+        "industrial brands that look premium command better pricing and attract better clients — "
+        "and your current brand may not yet reflect the quality of your operations"
+    ),
+    "design": (
+        "in creative services, your brand is your portfolio — "
+        "and there's an opportunity to make it signal the level of work you actually deliver"
+    ),
+    "agency": (
+        "creative agencies are judged on their own brand first — "
+        "and there's an opportunity to ensure yours positions you at the premium end of the market"
+    ),
+    "branding": (
+        "branding agencies are judged on their own brand first — "
+        "and there's a real opportunity to ensure yours projects the authority you've earned"
+    ),
     "default": (
         "we believe there's a meaningful opportunity to strengthen your visual identity "
         "and messaging to match the quality of your underlying business"
@@ -221,6 +277,13 @@ def render_email(company: dict) -> dict:
     company_name = company.get("company_name", "your company")
     vc_source = company.get("vc_source", "")
 
+    # Use audit-derived brand_problem (company-specific) when available;
+    # otherwise fall back to the generic industry pain_point.
+    brand_problem = company.get("brand_problem") or ""
+    pain_point = brand_problem if brand_problem and brand_problem not in (
+        "No website.", "Website unreachable."
+    ) else _get_by_industry(PAIN_POINTS, industry)
+
     context = {
         "sender_name": SENDER_NAME,
         "sender_email": SENDER_EMAIL,
@@ -230,11 +293,11 @@ def render_email(company: dict) -> dict:
         "industry_label": get_industry_label(industry),
         "vc_source": vc_source,
         "product_service_line": _get_by_industry(PRODUCT_SERVICE_LINES, industry),
-        "pain_point": _get_by_industry(PAIN_POINTS, industry),
+        "pain_point": pain_point,
     }
 
     body = template.render(**context)
-    subject = f"Branding opportunity — {company_name} × Dõlmen Studios"
+    subject = f"{company_name} — Branding Collaboration"
     return {"email_subject": subject, "email_body": body}
 
 
