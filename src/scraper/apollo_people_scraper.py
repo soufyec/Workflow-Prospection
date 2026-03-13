@@ -260,15 +260,47 @@ def run_apollo_scraper(domains: list[str]) -> dict:
     print(f"  [APOLLO] Scraping {len(new_domains)} dominio(s) nuevos...")
 
     with sync_playwright() as pw:
-        # Use real Chrome (not Playwright's Chromium) so Google OAuth works
+        # Use the user's real Chrome profile so Google OAuth works
+        # (Google blocks any browser launched fresh by Playwright)
+        import platform, tempfile
+        system = platform.system()
+        if system == "Windows":
+            chrome_profile = os.path.join(
+                os.environ.get("LOCALAPPDATA", ""),
+                "Google", "Chrome", "User Data"
+            )
+        elif system == "Darwin":
+            chrome_profile = os.path.expanduser(
+                "~/Library/Application Support/Google/Chrome"
+            )
+        else:
+            chrome_profile = os.path.expanduser("~/.config/google-chrome")
+
+        # Use a copy of the profile dir to avoid Chrome "profile in use" lock
+        tmp_profile = os.path.join(tempfile.gettempdir(), "apollo_chrome_profile")
+
+        context = None
         try:
-            browser = pw.chromium.launch(channel="chrome", headless=False, slow_mo=40)
-        except Exception:
-            # Fallback to bundled Chromium if Chrome not installed
-            browser = pw.chromium.launch(headless=False, slow_mo=40)
-        context = browser.new_context(
-            viewport={"width": 1280, "height": 800},
-        )
+            context = pw.chromium.launch_persistent_context(
+                user_data_dir=tmp_profile,
+                channel="chrome",
+                headless=False,
+                slow_mo=40,
+                viewport={"width": 1280, "height": 800},
+                args=["--disable-blink-features=AutomationControlled"],
+                ignore_default_args=["--enable-automation"],
+            )
+        except Exception as e:
+            print(f"  [APOLLO] No se pudo usar Chrome real ({e}), usando Chromium...")
+            context = pw.chromium.launch_persistent_context(
+                user_data_dir=tmp_profile,
+                headless=False,
+                slow_mo=40,
+                viewport={"width": 1280, "height": 800},
+                args=["--disable-blink-features=AutomationControlled"],
+                ignore_default_args=["--enable-automation"],
+            )
+
         page = context.new_page()
 
         try:
@@ -296,7 +328,6 @@ def run_apollo_scraper(domains: list[str]) -> dict:
 
         finally:
             context.close()
-            browser.close()
 
     total_with_email = sum(
         1 for d in new_domains
