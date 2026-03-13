@@ -260,14 +260,14 @@ def run_apollo_scraper(domains: list[str]) -> dict:
     print(f"  [APOLLO] Scraping {len(new_domains)} dominio(s) nuevos...")
 
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=False, slow_mo=40)
+        # Use real Chrome (not Playwright's Chromium) so Google OAuth works
+        try:
+            browser = pw.chromium.launch(channel="chrome", headless=False, slow_mo=40)
+        except Exception:
+            # Fallback to bundled Chromium if Chrome not installed
+            browser = pw.chromium.launch(headless=False, slow_mo=40)
         context = browser.new_context(
             viewport={"width": 1280, "height": 800},
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
         )
         page = context.new_page()
 
