@@ -4,6 +4,7 @@ Multi-provider email enrichment waterfall.
 Providers tried in order (domain-based first, then name-based, then LinkedIn):
 
   Domain-based (no name required):
+    0. Apollo.io    — people/search by domain → verified business emails
     1. Prospeo      — domain search → returns multiple ranked contacts
     2. FindyMail    — domain search (if plan supports it)
 
@@ -36,6 +37,7 @@ Usage:
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
 from typing import Optional
@@ -44,6 +46,7 @@ from urllib.parse import urlparse
 import requests
 
 from config.settings import (
+    APOLLO_API_KEY,
     CONTACTOUT_API_KEY,
     FINDYMAIL_API_KEY,
     ICYPEAS_API_KEY,
@@ -122,6 +125,80 @@ def _candidate(email: str, name: str | None, title: str | None,
         "provider": provider,
         "title_score": _score_title(title or ""),
     }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Provider 0 — Apollo.io (people search by domain → verified business emails)
+# ──────────────────────────────────────────────────────────────────────────────
+
+_APOLLO_TITLE_KEYWORDS = [
+    "CEO", "Chief Executive",
+    "Founder", "Co-Founder",
+    "CMO", "Chief Marketing",
+    "Marketing Director", "Head of Marketing", "VP Marketing",
+    "Chief Growth", "Growth Director",
+    "COO", "Managing Director", "General Manager",
+]
+
+
+def _apollo_people_search(domain: str, company_name: str) -> list[dict]:
+    """
+    Search Apollo.io for decision-makers at `domain` and return their emails.
+
+    Tries /v1/mixed_people/search first (requires paid plan), then falls back
+    to /v1/people/search. Masked emails ("e****@domain.com") are silently
+    skipped — they require an Apollo export credit to unlock.
+
+    NOTE: Requires Apollo plan with people search access (Basic or above).
+    Free plan returns 403 — upgrade at https://app.apollo.io/
+    """
+    if not APOLLO_API_KEY:
+        return []
+
+    payload = {
+        "q_organization_domains": [domain],
+        "person_titles": _APOLLO_TITLE_KEYWORDS,
+        "per_page": 10,
+        "page": 1,
+    }
+    headers = {"Content-Type": "application/json", "X-Api-Key": APOLLO_API_KEY}
+
+    people = []
+    for endpoint in (
+        "https://api.apollo.io/v1/mixed_people/search",
+        "https://api.apollo.io/v1/people/search",
+    ):
+        try:
+            resp = requests.post(endpoint, json=payload, headers=headers, timeout=15)
+            if resp.status_code == 403:
+                err = resp.json().get("error_code", "")
+                if err == "API_INACCESSIBLE":
+                    logger.debug("Apollo: plan upgrade required for people search (%s)", endpoint)
+                    break  # No point trying second endpoint
+                continue
+            if resp.status_code == 200:
+                people = resp.json().get("people") or []
+                break
+        except Exception as exc:
+            logger.debug("Apollo people search failed (%s): %s", endpoint, exc)
+            break
+
+    results = []
+    for person in people:
+        email = person.get("email") or ""
+        # Skip masked emails — these require paid credits to unlock
+        if not email or "@" not in email or "****" in email:
+            continue
+        name = f"{person.get('first_name', '')} {person.get('last_name', '')}".strip() or None
+        title = person.get("title") or person.get("headline") or None
+        results.append(_candidate(
+            email=email,
+            name=name,
+            title=title,
+            confidence=0.90,
+            provider="apollo",
+        ))
+    return results
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -259,13 +336,15 @@ def verify_email(email: str) -> tuple[bool, float]:
 
 def _icypeas_search(first: str, last: str, domain: str) -> list[dict]:
     """POST /api/email-search → email by name + domain."""
-    auth = ICYPEAS_AUTH or ICYPEAS_API_KEY  # fallback for legacy single-key setup
-    if not auth or not first or not last:
+    # IcyPeas uses Basic auth: base64(user_id:api_key)
+    raw_auth = ICYPEAS_AUTH or ICYPEAS_API_KEY
+    if not raw_auth or not first or not last:
         return []
+    b64_auth = base64.b64encode(raw_auth.encode()).decode()
     data = _post(
         "https://api.icypeas.com/api/email-search",
         headers={
-            "Authorization": auth,
+            "Authorization": f"Basic {b64_auth}",
             "Content-Type": "application/json",
         },
         body={"firstname": first, "lastname": last, "domainOrCompany": domain},
@@ -448,6 +527,7 @@ def enrich_email(company: dict) -> dict:
     candidates: list[dict] = []
 
     # ── Phase 1: Domain-based searches (no name needed) ──────────────────────
+    candidates.extend(_apollo_people_search(domain, company_name))
     candidates.extend(_prospeo_domain_search(domain, company_name))
 
     # If Prospeo didn't return a good high-priority result, try name-based APIs
