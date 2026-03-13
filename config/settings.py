@@ -45,6 +45,12 @@ NOTION_DATABASE_ID = os.environ.get(
 LINKEDIN_EMAIL = os.environ.get("LINKEDIN_EMAIL", "")
 LINKEDIN_PASSWORD = os.environ.get("LINKEDIN_PASSWORD", "")
 
+# ── Apollo.io browser scraper ─────────────────────────────────────────────────
+# Used to log in with Gmail and scrape people search results.
+# APOLLO_EMAIL: the Google/Gmail account used to sign in at app.apollo.io
+APOLLO_EMAIL = os.environ.get("APOLLO_EMAIL", "")
+APOLLO_SESSION_PATH = os.environ.get("APOLLO_SESSION_PATH", "credentials/apollo_session.json")
+
 CREDENTIALS_PATH = os.environ.get("CREDENTIALS_PATH", "credentials/credentials.json")
 TOKEN_PATH = os.environ.get("TOKEN_PATH", "credentials/token.json")
 LINKEDIN_SESSION_PATH = os.environ.get("LINKEDIN_SESSION_PATH", "credentials/linkedin_session.json")

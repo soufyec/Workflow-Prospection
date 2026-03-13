@@ -8,6 +8,7 @@ Usage:
 
   # ── VC-portfolio mode (original) ───────────────────────────────────────────
   python main.py --step discover    # Scrape VC portfolios + LinkedIn posts + Apollo
+  python main.py --step apollo      # Browser-scrape Apollo people for all pipeline companies
   python main.py --step enrich      # Find stakeholder emails (scraping + multi-provider APIs)
   python main.py --step re-enrich   # Re-run APIs on companies with missing/weak emails
   python main.py --step generate    # Render personalized emails from template
@@ -51,6 +52,29 @@ def cmd_discover(args):
 
     companies = discover_companies()
     print(f"\n  New companies to process: {len(companies)}")
+
+
+def cmd_apollo(args):
+    print("\n=== APOLLO BROWSER SCRAPER ===")
+    from src.scraper.apollo_people_scraper import run_apollo_scraper
+    from urllib.parse import urlparse
+
+    state = load_state(PIPELINE_PATH)
+    companies = state.get("discovered", []) or state.get("enriched", [])
+    domains = []
+    for c in companies:
+        w = c.get("website", "")
+        if w:
+            d = urlparse(w).netloc.replace("www.", "")
+            if d and d not in domains:
+                domains.append(d)
+
+    if not domains:
+        print("  No hay empresas en el pipeline. Ejecuta --step dolmen primero.")
+        return
+
+    print(f"  Scraping Apollo para {len(domains)} dominios...")
+    run_apollo_scraper(domains)
 
 
 def cmd_enrich(args):
@@ -242,7 +266,7 @@ def main():
     mode_group = parser.add_mutually_exclusive_group(required=False)
     mode_group.add_argument(
         "--step",
-        choices=["dolmen", "discover", "enrich", "re-enrich", "generate", "draft", "followup", "review", "send", "all"],
+        choices=["dolmen", "discover", "apollo", "enrich", "re-enrich", "generate", "draft", "followup", "review", "send", "all"],
         nargs="?",
         const="all",
         default=None,
@@ -303,6 +327,7 @@ def main():
     dispatch = {
         "dolmen": cmd_dolmen,
         "discover": cmd_discover,
+        "apollo": cmd_apollo,
         "enrich": cmd_enrich,
         "re-enrich": cmd_reenrich,
         "generate": cmd_generate,

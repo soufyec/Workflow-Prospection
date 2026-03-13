@@ -526,6 +526,21 @@ def enrich_email(company: dict) -> dict:
     linkedin_url = company.get("linkedin_url") or ""
     candidates: list[dict] = []
 
+    # ── Phase 0: Apollo browser cache (pre-scraped via apollo_people_scraper) ─
+    try:
+        from src.scraper.apollo_people_scraper import get_cached_contacts
+        for contact in (get_cached_contacts(domain) or []):
+            if contact.get("email"):
+                candidates.append(_candidate(
+                    email=contact["email"],
+                    name=contact.get("name"),
+                    title=contact.get("title"),
+                    confidence=0.88,
+                    provider="apollo-browser",
+                ))
+    except Exception:
+        pass
+
     # ── Phase 1: Domain-based searches (no name needed) ──────────────────────
     candidates.extend(_apollo_people_search(domain, company_name))
     candidates.extend(_prospeo_domain_search(domain, company_name))
