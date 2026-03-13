@@ -164,74 +164,181 @@ def login_apollo(page) -> bool:
 
 # ── People search + extraction ────────────────────────────────────────────────
 
+def _wait_for_results(page) -> bool:
+    """Wait until Apollo has loaded people results (not a spinner/empty state)."""
+    for _ in range(20):
+        page.wait_for_timeout(1500)
+        # Check for any sign of loaded rows or empty state
+        has_rows = page.evaluate("""() => {
+            const rows = document.querySelectorAll('tr');
+            return rows.length > 2;
+        }""")
+        if has_rows:
+            return True
+        # Also check for empty state text
+        body = page.inner_text("body") or ""
+        if "No results" in body or "0 contacts" in body or "no people" in body.lower():
+            return False
+    return False
+
+
 def _search_people_by_domain(page, domain: str) -> None:
-    """Navigate to Apollo people search filtered by domain + title keywords."""
-    titles_param = "&".join(
-        f"personTitles[]={t.replace(' ', '+')}" for t in _DECISION_MAKER_TITLES[:10]
-    )
-    url = (
-        f"{APOLLO_APP_URL}/#/people"
-        f"?organizationDomains[]={domain}"
-        f"&{titles_param}"
-        f"&sortByField=recommendations&sortAscending=false"
-    )
-    page.goto(url, wait_until="domcontentloaded", timeout=25000)
-    page.wait_for_timeout(random.randint(3000, 5000))
-    for _ in range(3):
-        page.evaluate("window.scrollBy(0, 500)")
-        page.wait_for_timeout(random.randint(800, 1500))
+    """Search Apollo people by domain using the filter UI."""
+    # Step 1: navigate to the people page (no filters)
+    page.goto(f"{APOLLO_APP_URL}/#/people", wait_until="domcontentloaded", timeout=30000)
+    page.wait_for_timeout(3000)
+
+    # Step 2: find the company/domain filter and set it
+    # Apollo's filter bar has a "Company" or "Organization" button
+    clicked_filter = False
+    for selector in [
+        "button:has-text('Company')",
+        "button:has-text('Organization')",
+        "button:has-text('Current Company')",
+        "[data-cy='filter-company']",
+        "span:has-text('Company')",
+    ]:
+        el = page.query_selector(selector)
+        if el:
+            try:
+                el.click()
+                page.wait_for_timeout(1500)
+                clicked_filter = True
+                break
+            except Exception:
+                continue
+
+    if clicked_filter:
+        # Type domain in the search input that appeared
+        for input_sel in [
+            "input[placeholder*='company' i]",
+            "input[placeholder*='organization' i]",
+            "input[placeholder*='Search' i]",
+            "[role='combobox']",
+            "input[type='text']",
+        ]:
+            inp = page.query_selector(input_sel)
+            if inp and inp.is_visible():
+                try:
+                    inp.click()
+                    inp.fill(domain)
+                    page.wait_for_timeout(2000)
+                    # Pick first autocomplete option
+                    for opt_sel in [
+                        "[role='option']:first-child",
+                        "li[role='option']:first-child",
+                        ".Select-option:first-child",
+                        "[class*='option']:first-child",
+                    ]:
+                        opt = page.query_selector(opt_sel)
+                        if opt and opt.is_visible():
+                            opt.click()
+                            page.wait_for_timeout(1000)
+                            break
+                    else:
+                        # Press Enter if no autocomplete appeared
+                        inp.press("Enter")
+                    break
+                except Exception:
+                    continue
+
+    # Step 3: if UI filter didn't work, fall back to URL with params
+    if not clicked_filter:
+        from urllib.parse import quote
+        titles_param = "&".join(
+            f"personTitles[]={quote(t)}" for t in _DECISION_MAKER_TITLES[:8]
+        )
+        url = (
+            f"{APOLLO_APP_URL}/#/people"
+            f"?organizationDomains[]={domain}"
+            f"&{titles_param}"
+            f"&sortByField=recommendations&sortAscending=false"
+        )
+        page.goto(url, wait_until="domcontentloaded", timeout=25000)
+
+    # Step 4: wait for results to appear
+    _wait_for_results(page)
+
+    # Scroll to trigger lazy loading
+    for _ in range(4):
+        page.evaluate("window.scrollBy(0, 400)")
+        page.wait_for_timeout(600)
 
 
 def _extract_contacts(page) -> list[dict]:
-    """Extract visible name, title, email from Apollo people rows."""
-    contacts = []
+    """Extract visible name, title, email from Apollo people rows using JS."""
+    # Use JavaScript to extract data generically — resilient to class changes
+    contacts = page.evaluate("""() => {
+        const results = [];
+        const seen = new Set();
 
-    # Apollo uses obfuscated CSS classes — try multiple known selectors
-    rows = (
-        page.query_selector_all("tr.zp_RFed0")
-        or page.query_selector_all("[data-cy='people-table-row']")
-        or page.query_selector_all("tr[class*='zp_']")
-        or page.query_selector_all(".zp_cUMiD")
-    )
+        // Strategy 1: table rows
+        const rows = Array.from(document.querySelectorAll('tr')).filter(r => {
+            const text = r.innerText || '';
+            // Skip header rows and rows with no real content
+            return text.length > 10 && !text.startsWith('Name') && !text.startsWith('Title');
+        });
 
-    for row in rows:
-        try:
-            name_el = (
-                row.query_selector("[data-cy='person-name']")
-                or row.query_selector("a[href*='/people/']")
-                or row.query_selector(".zp_xvo3G, .zp_Y6y8d a")
-            )
-            name = name_el.inner_text().strip() if name_el else None
+        for (const row of rows) {
+            // Name: first link to a /people/ profile, or first bold/strong text
+            const nameLink = row.querySelector('a[href*="/people/"]');
+            const name = nameLink ? nameLink.innerText.trim() : null;
+            if (!name || seen.has(name)) continue;
 
-            title_el = (
-                row.query_selector("[data-cy='person-title']")
-                or row.query_selector("span[class*='title'], .zp_FLD6D, .zp_Y6y8d span")
-            )
-            title = title_el.inner_text().strip() if title_el else None
+            // Title: second or third td text
+            const cells = Array.from(row.querySelectorAll('td'));
+            let title = null;
+            if (cells.length > 1) {
+                // Title is usually in the 2nd or 3rd cell
+                for (let i = 1; i < Math.min(cells.length, 4); i++) {
+                    const t = cells[i].innerText.trim();
+                    if (t && t.length > 2 && !t.includes('@') && !/^[+\\d]/.test(t)) {
+                        title = t;
+                        break;
+                    }
+                }
+            }
 
-            # Email — only collect if not masked
-            email = None
-            email_el = (
-                row.query_selector("a[href^='mailto:']")
-                or row.query_selector("[data-cy='person-email'] span")
-                or row.query_selector(".zp_DqCa5, .zp_B0ula, span[class*='email']")
-            )
-            if email_el:
-                href = email_el.get_attribute("href") or ""
-                if href.startswith("mailto:"):
-                    email = href.replace("mailto:", "").strip().lower()
-                else:
-                    text = email_el.inner_text().strip()
-                    if "@" in text and "****" not in text and "Access" not in text:
-                        email = text.lower()
+            // Email: mailto link or text containing @
+            let email = null;
+            const mailtoLink = row.querySelector('a[href^="mailto:"]');
+            if (mailtoLink) {
+                email = mailtoLink.href.replace('mailto:', '').trim().toLowerCase();
+            } else {
+                // Look for any span/td containing a valid email
+                for (const el of row.querySelectorAll('span, td, div')) {
+                    const t = el.innerText.trim();
+                    if (t.includes('@') && t.includes('.') && !t.includes('****')
+                        && !t.includes('Access') && !t.includes(' ') && t.length < 80) {
+                        email = t.toLowerCase();
+                        break;
+                    }
+                }
+            }
 
-            if name:
-                contacts.append({"name": name, "title": title or "", "email": email})
+            seen.add(name);
+            results.push({ name, title: title || '', email });
+        }
 
-        except Exception:
-            continue
+        // Strategy 2: card/list views (non-table layout)
+        if (results.length === 0) {
+            const cards = document.querySelectorAll('[class*="person"], [class*="contact"], [class*="people"]');
+            for (const card of cards) {
+                const links = card.querySelectorAll('a[href*="/people/"]');
+                const name = links.length ? links[0].innerText.trim() : null;
+                if (!name || seen.has(name)) continue;
+                const text = card.innerText || '';
+                const emailMatch = text.match(/[a-z0-9._%+\\-]+@[a-z0-9.\\-]+\\.[a-z]{2,}/i);
+                seen.add(name);
+                results.push({ name, title: '', email: emailMatch ? emailMatch[0].toLowerCase() : null });
+            }
+        }
 
-    return contacts
+        return results;
+    }""")
+
+    # Filter: only keep entries with a real name (length > 1)
+    return [c for c in (contacts or []) if c.get("name") and len(c["name"]) > 1]
 
 
 # ── Batch scraper ─────────────────────────────────────────────────────────────
