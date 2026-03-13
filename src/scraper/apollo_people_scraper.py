@@ -358,7 +358,8 @@ def run_apollo_scraper(domains: list[str]) -> dict:
         return {}
 
     cache = load_cache()
-    new_domains = [d for d in domains if d not in cache]
+    # Re-scrape domains that are missing OR were cached as empty (broken prior run)
+    new_domains = [d for d in domains if d not in cache or cache[d] == []]
 
     if not new_domains:
         print("  [APOLLO] Todos los dominios ya están en caché — nada que scraper")
