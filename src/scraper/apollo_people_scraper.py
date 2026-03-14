@@ -265,9 +265,17 @@ def _search_people_by_domain(page, domain: str) -> None:
         page.wait_for_timeout(600)
 
 
-def _reveal_emails(page) -> None:
-    """Click all 'Access email' buttons on the page and wait for emails to load."""
-    # Selectors Apollo uses for the email-reveal button
+def _reveal_emails(page, max_contacts: int = 2) -> None:
+    """
+    Click 'Access email' only on rows whose title matches a decision-maker keyword.
+    Stops after max_contacts reveals to preserve credits.
+    """
+    titles_lower = [t.lower() for t in _DECISION_MAKER_TITLES]
+
+    def _title_is_relevant(text: str) -> bool:
+        text_l = text.lower()
+        return any(t in text_l for t in titles_lower)
+
     REVEAL_SELECTORS = [
         "button:has-text('Access email')",
         "button:has-text('Get email')",
@@ -280,22 +288,36 @@ def _reveal_emails(page) -> None:
     ]
 
     revealed = 0
-    for selector in REVEAL_SELECTORS:
-        buttons = page.query_selector_all(selector)
-        for btn in buttons:
-            try:
-                if btn.is_visible():
-                    btn.click()
-                    page.wait_for_timeout(800)
-                    revealed += 1
-            except Exception:
-                continue
-        if revealed:
-            break  # one working selector is enough
+    rows = page.query_selector_all("tr")
+    for row in rows:
+        if revealed >= max_contacts:
+            break
+        row_text = ""
+        try:
+            row_text = row.inner_text()
+        except Exception:
+            continue
+        if not _title_is_relevant(row_text):
+            continue
+        # Find and click the reveal button inside this row
+        for selector in REVEAL_SELECTORS:
+            btn = row.query_selector(selector)
+            if btn:
+                try:
+                    if btn.is_visible():
+                        btn.scroll_into_view_if_needed()
+                        btn.click()
+                        page.wait_for_timeout(900)
+                        revealed += 1
+                        break
+                except Exception:
+                    continue
 
     if revealed:
-        print(f"      → {revealed} email(s) desbloqueado(s)")
-        page.wait_for_timeout(1500)  # let all emails render
+        print(f"      → {revealed} email(s) desbloqueado(s) (contactos relevantes)")
+        page.wait_for_timeout(1500)
+    else:
+        print("      → Sin botones de email revelables para perfiles relevantes")
 
 
 def _extract_contacts(page) -> list[dict]:
