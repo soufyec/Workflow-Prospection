@@ -49,6 +49,7 @@ from config.settings import (
     APOLLO_API_KEY,
     CONTACTOUT_API_KEY,
     FINDYMAIL_API_KEY,
+    HUNTER_API_KEY,
     ICYPEAS_API_KEY,
     ICYPEAS_AUTH,
     LEADMAGIC_API_KEY,
@@ -460,6 +461,101 @@ def _contactout_linkedin(linkedin_url: str) -> list[dict]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Provider 7 — Hunter.io (domain search, free 25/month)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _hunter_domain_search(domain: str) -> list[dict]:
+    """GET /v2/domain-search → contacts with emails indexed on the web for a domain."""
+    if not HUNTER_API_KEY:
+        return []
+    data = _get(
+        "https://api.hunter.io/v2/domain-search",
+        headers={},
+        params={"domain": domain, "api_key": HUNTER_API_KEY, "limit": 10},
+    )
+    emails_data = (data.get("data") or {}).get("emails") or []
+    results = []
+    for e in emails_data:
+        email = e.get("value") or ""
+        if not email or "@" not in email:
+            continue
+        first = e.get("first_name") or ""
+        last = e.get("last_name") or ""
+        name = f"{first} {last}".strip() or None
+        title = e.get("position") or None
+        confidence = (e.get("confidence") or 70) / 100
+        results.append(_candidate(
+            email=email,
+            name=name,
+            title=title,
+            confidence=confidence,
+            provider="hunter",
+        ))
+    return results
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Provider 8 — SMTP permutation (free, no API key needed)
+# ──────────────────────────────────────────────────────────────────────────────
+
+_EMAIL_PATTERNS = [
+    "{first}.{last}",
+    "{first}{last}",
+    "{f}{last}",
+    "{first}",
+    "{f}.{last}",
+    "{first}_{last}",
+]
+
+
+def _generate_permutations(first: str, last: str, domain: str) -> list[str]:
+    first = first.lower().strip()
+    last = last.lower().strip()
+    f = first[0] if first else ""
+    return [
+        f"{p}@{domain}"
+        for p in (pat.format(first=first, last=last, f=f) for pat in _EMAIL_PATTERNS)
+        if p
+    ]
+
+
+def _smtp_verify(email: str) -> bool:
+    """Lightweight SMTP RCPT TO check — returns True if the server accepts the address."""
+    import smtplib
+    try:
+        import dns.resolver
+        domain = email.split("@")[1]
+        records = dns.resolver.resolve(domain, "MX")
+        mx = sorted(records, key=lambda r: r.preference)[0].exchange.to_text().rstrip(".")
+        with smtplib.SMTP(mx, 25, timeout=8) as s:
+            s.ehlo("dolmenstudios.com")
+            s.mail("verify@dolmenstudios.com")
+            code, _ = s.rcpt(email)
+            return code == 250
+    except Exception:
+        return False
+
+
+def _permutation_search(first: str, last: str, domain: str) -> list[dict]:
+    """
+    Generate common email permutations for a name+domain and SMTP-verify each.
+    Completely free — no API key required. Needs dnspython (pip install dnspython).
+    """
+    if not first or not last or not domain:
+        return []
+    for email in _generate_permutations(first, last, domain):
+        if _smtp_verify(email):
+            return [_candidate(
+                email=email,
+                name=f"{first.capitalize()} {last.capitalize()}",
+                title=None,
+                confidence=0.75,
+                provider="smtp-permutation",
+            )]
+    return []
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -527,6 +623,7 @@ def enrich_email(company: dict) -> dict:
     candidates: list[dict] = []
 
     # ── Phase 0: Apollo browser cache (pre-scraped via apollo_people_scraper) ─
+    apollo_names_without_email: list[tuple[str, str]] = []  # (first, last) to permute later
     try:
         from src.scraper.apollo_people_scraper import get_cached_contacts
         for contact in (get_cached_contacts(domain) or []):
@@ -538,24 +635,48 @@ def enrich_email(company: dict) -> dict:
                     confidence=0.88,
                     provider="apollo-browser",
                 ))
+            elif contact.get("name"):
+                # Name found but email locked — queue for SMTP permutation
+                first, last = _split_name(contact["name"])
+                if first and last:
+                    apollo_names_without_email.append((first, last))
     except Exception:
         pass
 
     # ── Phase 1: Domain-based searches (no name needed) ──────────────────────
+    candidates.extend(_hunter_domain_search(domain))
     candidates.extend(_apollo_people_search(domain, company_name))
     candidates.extend(_prospeo_domain_search(domain, company_name))
 
-    # If Prospeo didn't return a good high-priority result, try name-based APIs
+    # If domain searches didn't return a good high-priority result, try name-based
     best_so_far = _pick_best(candidates)
     need_name_search = not best_so_far or best_so_far["title_score"] > 5
 
     # ── Phase 2: Name-based searches ─────────────────────────────────────────
-    if need_name_search and existing_name:
+    names_to_try: list[tuple[str, str]] = []
+    if existing_name:
         first, last = _split_name(existing_name)
         if first and last:
-            candidates.extend(_findymail_find(existing_name, domain))
-            candidates.extend(_icypeas_search(first, last, domain))
-            candidates.extend(_leadmagic_find(first, last, company_name, domain))
+            names_to_try.append((first, last))
+    # Add Apollo-scraped names (contacts found but email was locked)
+    for pair in apollo_names_without_email:
+        if pair not in names_to_try:
+            names_to_try.append(pair)
+
+    if need_name_search and names_to_try:
+        first, last = names_to_try[0]
+        full_name = f"{first} {last}"
+        candidates.extend(_findymail_find(full_name, domain))
+        candidates.extend(_icypeas_search(first, last, domain))
+        candidates.extend(_leadmagic_find(first, last, company_name, domain))
+
+    # SMTP permutation — free, try all scraped names until one verifies
+    if need_name_search or not _pick_best(candidates):
+        for first, last in names_to_try:
+            result = _permutation_search(first, last, domain)
+            if result:
+                candidates.extend(result)
+                break
 
     # ── Phase 3: LinkedIn-based searches ─────────────────────────────────────
     if linkedin_url:

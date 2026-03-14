@@ -32,6 +32,9 @@ WIZA_API_KEY = os.environ.get("WIZA_API_KEY", "")
 # ContactOut — https://contactout.com/  (LinkedIn URL → email)
 CONTACTOUT_API_KEY = os.environ.get("CONTACTOUT_API_KEY", "")
 
+# Hunter.io — https://hunter.io/  (domain search, free 25/month)
+HUNTER_API_KEY = os.environ.get("HUNTER_API_KEY", "")
+
 GMAIL_SIGNATURE = os.environ.get("GMAIL_SIGNATURE", "")
 
 # ── Notion CRM ────────────────────────────────────────────────────────────────
