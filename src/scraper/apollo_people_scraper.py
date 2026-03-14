@@ -265,6 +265,39 @@ def _search_people_by_domain(page, domain: str) -> None:
         page.wait_for_timeout(600)
 
 
+def _reveal_emails(page) -> None:
+    """Click all 'Access email' buttons on the page and wait for emails to load."""
+    # Selectors Apollo uses for the email-reveal button
+    REVEAL_SELECTORS = [
+        "button:has-text('Access email')",
+        "button:has-text('Get email')",
+        "button:has-text('Reveal email')",
+        "button:has-text('Show email')",
+        "[data-cy*='access-email']",
+        "[class*='accessEmail']",
+        "[class*='emailAccess']",
+        "span:has-text('Access email')",
+    ]
+
+    revealed = 0
+    for selector in REVEAL_SELECTORS:
+        buttons = page.query_selector_all(selector)
+        for btn in buttons:
+            try:
+                if btn.is_visible():
+                    btn.click()
+                    page.wait_for_timeout(800)
+                    revealed += 1
+            except Exception:
+                continue
+        if revealed:
+            break  # one working selector is enough
+
+    if revealed:
+        print(f"      → {revealed} email(s) desbloqueado(s)")
+        page.wait_for_timeout(1500)  # let all emails render
+
+
 def _extract_contacts(page) -> list[dict]:
     """Extract visible name, title, email from Apollo people rows using JS."""
     # Use JavaScript to extract data generically — resilient to class changes
@@ -420,6 +453,7 @@ def run_apollo_scraper(domains: list[str]) -> dict:
                 print(f"\n  [APOLLO] → {domain}")
                 try:
                     _search_people_by_domain(page, domain)
+                    _reveal_emails(page)
                     contacts = _extract_contacts(page)
                     cache[domain] = contacts
                     save_cache(cache)
